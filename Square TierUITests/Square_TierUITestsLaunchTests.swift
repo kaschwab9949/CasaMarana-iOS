@@ -7,7 +7,7 @@
 
 import XCTest
 
-final class Square_TierUITestsLaunchTests: XCTestCase {
+final class Casa_MaranaUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true
@@ -31,3 +31,4 @@ final class Square_TierUITestsLaunchTests: XCTestCase {
         add(attachment)
     }
 }
+

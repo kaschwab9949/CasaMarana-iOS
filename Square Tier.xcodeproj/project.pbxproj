@@ -24,18 +24,32 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		53EED83F2EEF545100373C5F /* Square Tier.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Square Tier.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		53EED83F2EEF545100373C5F /* Casa Marana.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Casa Marana.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		53EED8502EEF545200373C5F /* Square TierTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Square TierTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		53EED85A2EEF545200373C5F /* Square TierUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Square TierUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		53EED8622EEF545200373C5F /* Exceptions for "Square Tier" folder in "Square Tier" target */ = {
+		533FB3442F19C3A9004F3F5B /* Exceptions for "Square TierUITests" folder in "Casa Marana" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				loyalty.pkpass,
+			);
+			target = 53EED83E2EEF545100373C5F /* Casa Marana */;
+		};
+		533FB3452F19C3A9004F3F5B /* Exceptions for "Square TierUITests" folder in "Square TierUITests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				loyalty.pkpass,
+			);
+			target = 53EED8592EEF545200373C5F /* Square TierUITests */;
+		};
+		53EED8622EEF545200373C5F /* Exceptions for "Square Tier" folder in "Casa Marana" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = 53EED83E2EEF545100373C5F /* Square Tier */;
+			target = 53EED83E2EEF545100373C5F /* Casa Marana */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -43,7 +57,7 @@
 		53EED8412EEF545100373C5F /* Square Tier */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				53EED8622EEF545200373C5F /* Exceptions for "Square Tier" folder in "Square Tier" target */,
+				53EED8622EEF545200373C5F /* Exceptions for "Square Tier" folder in "Casa Marana" target */,
 			);
 			path = "Square Tier";
 			sourceTree = "<group>";
@@ -55,6 +69,10 @@
 		};
 		53EED85D2EEF545200373C5F /* Square TierUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				533FB3442F19C3A9004F3F5B /* Exceptions for "Square TierUITests" folder in "Casa Marana" target */,
+				533FB3452F19C3A9004F3F5B /* Exceptions for "Square TierUITests" folder in "Square TierUITests" target */,
+			);
 			path = "Square TierUITests";
 			sourceTree = "<group>";
 		};
@@ -98,7 +116,7 @@
 		53EED8402EEF545100373C5F /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				53EED83F2EEF545100373C5F /* Square Tier.app */,
+				53EED83F2EEF545100373C5F /* Casa Marana.app */,
 				53EED8502EEF545200373C5F /* Square TierTests.xctest */,
 				53EED85A2EEF545200373C5F /* Square TierUITests.xctest */,
 			);
@@ -108,9 +126,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		53EED83E2EEF545100373C5F /* Square Tier */ = {
+		53EED83E2EEF545100373C5F /* Casa Marana */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 53EED8632EEF545200373C5F /* Build configuration list for PBXNativeTarget "Square Tier" */;
+			buildConfigurationList = 53EED8632EEF545200373C5F /* Build configuration list for PBXNativeTarget "Casa Marana" */;
 			buildPhases = (
 				53EED83B2EEF545100373C5F /* Sources */,
 				53EED83C2EEF545100373C5F /* Frameworks */,
@@ -123,11 +141,11 @@
 			fileSystemSynchronizedGroups = (
 				53EED8412EEF545100373C5F /* Square Tier */,
 			);
-			name = "Square Tier";
+			name = "Casa Marana";
 			packageProductDependencies = (
 			);
-			productName = "Square Tier";
-			productReference = 53EED83F2EEF545100373C5F /* Square Tier.app */;
+			productName = "Casa Marana";
+			productReference = 53EED83F2EEF545100373C5F /* Casa Marana.app */;
 			productType = "com.apple.product-type.application";
 		};
 		53EED84F2EEF545200373C5F /* Square TierTests */ = {
@@ -184,7 +202,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2620;
-				LastUpgradeCheck = 2620;
+				LastUpgradeCheck = 2630;
 				TargetAttributes = {
 					53EED83E2EEF545100373C5F = {
 						CreatedOnToolsVersion = 26.2;
@@ -213,7 +231,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				53EED83E2EEF545100373C5F /* Square Tier */,
+				53EED83E2EEF545100373C5F /* Casa Marana */,
 				53EED84F2EEF545200373C5F /* Square TierTests */,
 				53EED8592EEF545200373C5F /* Square TierUITests */,
 			);
@@ -271,12 +289,12 @@
 /* Begin PBXTargetDependency section */
 		53EED8522EEF545200373C5F /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 53EED83E2EEF545100373C5F /* Square Tier */;
+			target = 53EED83E2EEF545100373C5F /* Casa Marana */;
 			targetProxy = 53EED8512EEF545200373C5F /* PBXContainerItemProxy */;
 		};
 		53EED85C2EEF545200373C5F /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 53EED83E2EEF545100373C5F /* Square Tier */;
+			target = 53EED83E2EEF545100373C5F /* Casa Marana */;
 			targetProxy = 53EED85B2EEF545200373C5F /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -285,15 +303,26 @@
 		53EED8642EEF545200373C5F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = "Square Tier/Square_Tier.entitlements";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 3DL2NTXJ54;
+					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+					ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+					CM_API_KEY = "";
+					CM_BACKEND_BASE_URL = "https://casa-marana-backend.vercel.app";
+					CODE_SIGN_ENTITLEMENTS = "Square Tier/Square_Tier.entitlements";
+					CODE_SIGN_IDENTITY = "Apple Development";
+					CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = Y32NA77D5W;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "Square Tier/Info.plist";
+					INFOPLIST_FILE = "Square Tier/Info.plist";
+					INFOPLIST_KEY_CMAPIKey = "$(CM_API_KEY)";
+					INFOPLIST_KEY_CMBackendBaseURL = "$(CM_BACKEND_BASE_URL)";
+					INFOPLIST_KEY_CFBundleDisplayName = "Casa Marana";
+					INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to securely unlock your Casa Marana profile.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "We use your location to confirm you’re at Casa Marana for Smart Check-In and on-site rewards. Location is used only while you’re using the app.";
+				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = "We use your location to confirm you’re at Casa Marana for Smart Check-In and on-site rewards. Location is used only while you’re using the app.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We use your location to confirm you’re at Casa Marana for Smart Check-In and on-site rewards. Location is used only while you’re using the app.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -304,7 +333,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.Square-Tier";
+				PRODUCT_BUNDLE_IDENTIFIER = com.kyleschwab.squaretier;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -319,15 +348,28 @@
 		53EED8652EEF545200373C5F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = "Square Tier/Square_Tier.entitlements";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 3DL2NTXJ54;
+					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+					ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+					CM_API_KEY = "";
+					CM_BACKEND_BASE_URL = "https://casa-marana-backend.vercel.app";
+					CODE_SIGN_ENTITLEMENTS = "Square Tier/Square_Tier.entitlements";
+					CODE_SIGN_IDENTITY = "Apple Development";
+					"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = Y32NA77D5W;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "Square Tier/Info.plist";
+					INFOPLIST_FILE = "Square Tier/Info.plist";
+					INFOPLIST_KEY_CMAPIKey = "$(CM_API_KEY)";
+					INFOPLIST_KEY_CMBackendBaseURL = "$(CM_BACKEND_BASE_URL)";
+					INFOPLIST_KEY_CFBundleDisplayName = "Casa Marana";
+					INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to securely unlock your Casa Marana profile.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "We use your location to confirm you’re at Casa Marana for Smart Check-In and on-site rewards. Location is used only while you’re using the app.";
+				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = "We use your location to confirm you’re at Casa Marana for Smart Check-In and on-site rewards. Location is used only while you’re using the app.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We use your location to confirm you’re at Casa Marana for Smart Check-In and on-site rewards. Location is used only while you’re using the app.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -338,8 +380,10 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.Square-Tier";
+				PRODUCT_BUNDLE_IDENTIFIER = com.kyleschwab.squaretier;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = CasaMarana_AppStoreConnect_FINAL;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -385,7 +429,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = 3DL2NTXJ54;
+				DEVELOPMENT_TEAM = Y32NA77D5W;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -409,6 +453,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -449,7 +494,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = 3DL2NTXJ54;
+				DEVELOPMENT_TEAM = Y32NA77D5W;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -466,6 +511,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -489,7 +535,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Square Tier.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Square Tier";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Casa Marana.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Casa Marana";
 			};
 			name = Debug;
 		};
@@ -511,7 +557,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Square Tier.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Square Tier";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Casa Marana.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Casa Marana";
 			};
 			name = Release;
 		};
@@ -531,7 +577,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = "Square Tier";
+				TEST_TARGET_NAME = "Casa Marana";
 			};
 			name = Debug;
 		};
@@ -551,7 +597,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = "Square Tier";
+				TEST_TARGET_NAME = "Casa Marana";
 			};
 			name = Release;
 		};
@@ -567,7 +613,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		53EED8632EEF545200373C5F /* Build configuration list for PBXNativeTarget "Square Tier" */ = {
+		53EED8632EEF545200373C5F /* Build configuration list for PBXNativeTarget "Casa Marana" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				53EED8642EEF545200373C5F /* Debug */,

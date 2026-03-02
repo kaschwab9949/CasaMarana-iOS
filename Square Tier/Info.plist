@@ -2,9 +2,19 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CMBackendBaseURL</key>
+	<string>$(CM_BACKEND_BASE_URL)</string>
+	<key>CMAPIKey</key>
+	<string>$(CM_API_KEY)</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Casa Marana uses your location for Smart Check-In to confirm when you're at the venue and award on-site rewards.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Casa Marana uses your location in the background for automatic Smart Check-In when you arrive at the venue.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Use Face ID to quickly unlock your Casa Marana profile.</string>
 	<key>UIBackgroundModes</key>
 	<array>
-		<string>remote-notification</string>
+		<string>location</string>
 	</array>
 </dict>
 </plist>
