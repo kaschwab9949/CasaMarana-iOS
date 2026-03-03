@@ -4,7 +4,7 @@ func normalizeCustomerEmail(_ raw: String) -> String {
     raw.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
-func isValidCustomerEmail(_ raw: String) -> Bool {
+func isValidCustomerEmailOptional(_ raw: String) -> Bool {
     let email = normalizeCustomerEmail(raw)
     if email.isEmpty {
         return true
@@ -13,6 +13,16 @@ func isValidCustomerEmail(_ raw: String) -> Bool {
     guard email.count <= 254 else { return false }
     let pattern = #"^[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}$"#
     return email.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+}
+
+func isValidCustomerEmailRequired(_ raw: String) -> Bool {
+    let email = normalizeCustomerEmail(raw)
+    guard !email.isEmpty else { return false }
+    return isValidCustomerEmailOptional(email)
+}
+
+func isValidCustomerEmail(_ raw: String) -> Bool {
+    isValidCustomerEmailOptional(raw)
 }
 
 func normalizeCustomerBirthday(_ raw: String) -> String? {
@@ -62,6 +72,12 @@ func normalizeCustomerBirthday(_ raw: String) -> String? {
     guard isValidMonthDay(month: month, day: day, year: validationYear) else { return nil }
 
     return String(format: "%02d/%02d/%02d", month, day, year % 100)
+}
+
+func normalizeCustomerBirthdayRequired(_ raw: String) -> String? {
+    guard let normalized = normalizeCustomerBirthday(raw) else { return nil }
+    let trimmed = normalized.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
 }
 
 private func isValidMonthDay(month: Int, day: Int, year: Int) -> Bool {

@@ -161,7 +161,11 @@ final class Casa_MaranaUITests: XCTestCase {
     }
 
     private func selectTab(named expectedLabel: String) {
-        let tabBar = app.tabBars.firstMatch
+        selectTab(named: expectedLabel, in: app)
+    }
+
+    private func selectTab(named expectedLabel: String, in targetApp: XCUIApplication) {
+        let tabBar = targetApp.tabBars.firstMatch
         XCTAssertTrue(tabBar.waitForExistence(timeout: 5))
 
         let buttons = tabBar.buttons.allElementsBoundByIndex
@@ -178,7 +182,7 @@ final class Casa_MaranaUITests: XCTestCase {
         let moreButton = tabBar.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'More' OR identifier CONTAINS[c] 'More'")).firstMatch
         if moreButton.waitForExistence(timeout: 2) {
             moreButton.tap()
-            let destination = app.tables.cells.staticTexts.matching(predicate).firstMatch
+            let destination = targetApp.tables.cells.staticTexts.matching(predicate).firstMatch
             XCTAssertTrue(destination.waitForExistence(timeout: 5), "Missing overflow destination '\(expectedLabel)'. Tab labels: [\(labels)]")
             destination.tap()
             return

@@ -2,14 +2,17 @@ import SwiftUI
 
 struct CreateAccountView: View {
     @EnvironmentObject var session: AppSession
+    @EnvironmentObject var location: VenueLocationManager
     @Environment(\.dismiss) private var dismiss
 
     // Force navigation to the Rewards tab after successful account creation.
     @AppStorage("cm.selectedTab") private var selectedTabRaw: String = "home"
+    @AppStorage("cm.smartCheckInEnabled") private var smartCheckInEnabled: Bool = false
 
     @State private var profile: UserProfile = .empty
     @State private var pin: String = ""
     @State private var confirmPin: String = ""
+    @State private var wantsSmartCheckIn = false
 
     // OTP State
     @State private var verificationCodeSent = false
@@ -86,8 +89,8 @@ struct CreateAccountView: View {
                pinIsValid(p1) &&
                p1 == p2 &&
                hasPIIConsent &&
-               isValidCustomerEmail(profile.email) &&
-               normalizeCustomerBirthday(profile.birthday) != nil
+               isValidCustomerEmailRequired(profile.email) &&
+               normalizeCustomerBirthdayRequired(profile.birthday) != nil
     }
 
     private func enrollmentFallbackMessage(for error: Error) -> String {
@@ -140,12 +143,12 @@ struct CreateAccountView: View {
             return
         }
 
-        guard isValidCustomerEmail(profile.email) else {
+        guard isValidCustomerEmailRequired(profile.email) else {
             error = "Email is required. Enter a valid email address."
             return
         }
 
-        guard let normalizedBirthday = normalizeCustomerBirthday(profile.birthday) else {
+        guard let normalizedBirthday = normalizeCustomerBirthdayRequired(profile.birthday) else {
             error = "Birthday is required. Use MM/DD/YY format."
             return
         }
@@ -183,6 +186,12 @@ struct CreateAccountView: View {
         }
 
         session.createAccount(profile: profile, pin: p1)
+        smartCheckInEnabled = wantsSmartCheckIn
+        if wantsSmartCheckIn {
+            location.requestPermission()
+        } else {
+            location.stop()
+        }
         rewardsStatusNote = postCreateRewardsMessage
 
         // If this view is still on the navigation stack, pop it quickly.
@@ -427,6 +436,20 @@ struct CreateAccountView: View {
                     }
                 }
 
+                GroupBox("Smart Check-In (Optional)") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Toggle(
+                            "Enable Smart Check-In",
+                            isOn: $wantsSmartCheckIn
+                        )
+                        .accessibilityIdentifier("auth.create.smartCheckInToggle")
+
+                        Text("Optional: enable Smart Check-In to earn extra visit points when you arrive at Casa Marana.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Button {
                     Task { await finalizeAccount() }
                 } label: {
@@ -454,6 +477,9 @@ struct CreateAccountView: View {
                 selectedTabRaw = AppTab.rewards.rawValue
                 dismiss()
             }
+        }
+        .onAppear {
+            wantsSmartCheckIn = smartCheckInEnabled
         }
     }
 }

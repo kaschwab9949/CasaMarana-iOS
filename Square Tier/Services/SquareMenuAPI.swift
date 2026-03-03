@@ -208,8 +208,12 @@ final class SquareMenuAPI {
                     description: description,
                     price: price,
                     category: category,
+                    displayCategory: category,
                     tags: tags.map { [$0] } ?? [category],
-                    sectionHint: nil
+                    sectionHint: nil,
+                    sectionRank: nil,
+                    categoryRank: nil,
+                    itemRank: nil
                 )
             )
         }
@@ -225,8 +229,12 @@ final class SquareMenuAPI {
 
         let description = firstString(in: object, keys: ["description", "details", "subtitle"]) ?? ""
         let category = firstString(in: object, keys: ["category", "category_name", "group", "section"]) ?? "Menu"
+        let displayCategory = firstString(in: object, keys: ["displayCategory", "display_category"])
         let tags = (object["tags"] as? [String]) ?? [category]
         let sectionHint = firstString(in: object, keys: ["sectionHint", "section_hint", "section"])
+        let sectionRank = firstInt(in: object, keys: ["sectionRank", "section_rank"])
+        let categoryRank = firstInt(in: object, keys: ["categoryRank", "category_rank"])
+        let itemRank = firstInt(in: object, keys: ["itemRank", "item_rank"])
 
         let priceString: String
         if let directPrice = firstString(in: object, keys: ["price", "price_display", "formatted_price"]) {
@@ -245,8 +253,12 @@ final class SquareMenuAPI {
             description: description,
             price: priceString,
             category: category,
+            displayCategory: displayCategory,
             tags: tags,
-            sectionHint: sectionHint
+            sectionHint: sectionHint,
+            sectionRank: sectionRank,
+            categoryRank: categoryRank,
+            itemRank: itemRank
         )
     }
 
@@ -257,10 +269,28 @@ final class SquareMenuAPI {
         }
 
         return unique.sorted {
-            if $0.category == $1.category {
+            let leftSectionRank = $0.sectionRank ?? Int.max
+            let rightSectionRank = $1.sectionRank ?? Int.max
+            if leftSectionRank != rightSectionRank {
+                return leftSectionRank < rightSectionRank
+            }
+
+            let leftCategoryRank = $0.categoryRank ?? Int.max
+            let rightCategoryRank = $1.categoryRank ?? Int.max
+            if leftCategoryRank != rightCategoryRank {
+                return leftCategoryRank < rightCategoryRank
+            }
+
+            let leftItemRank = $0.itemRank ?? Int.max
+            let rightItemRank = $1.itemRank ?? Int.max
+            if leftItemRank != rightItemRank {
+                return leftItemRank < rightItemRank
+            }
+
+            if $0.effectiveCategory == $1.effectiveCategory {
                 return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
             }
-            return $0.category.localizedCaseInsensitiveCompare($1.category) == .orderedAscending
+            return $0.effectiveCategory.localizedCaseInsensitiveCompare($1.effectiveCategory) == .orderedAscending
         }
     }
 

@@ -149,7 +149,7 @@ enum MenuCategoryMapping {
             }
         }
 
-        let normalizedCategory = normalize(item.category)
+        let normalizedCategory = normalize(item.effectiveCategory)
         if let explicit = explicitCategoryMap[normalizedCategory] {
             return explicit
         }
@@ -184,7 +184,7 @@ enum MenuCategoryMapping {
     }
 
     static func orderedCategories(in section: MenuSection, items: [MenuItem]) -> [String] {
-        let grouped = Set(items.map { $0.category })
+        let grouped = Set(items.map { $0.effectiveCategory })
         let sourcePriority: [String]
         switch section {
         case .food:
@@ -195,20 +195,33 @@ enum MenuCategoryMapping {
             sourcePriority = []
         }
 
-        var ordered: [String] = []
-        for category in sourcePriority where grouped.contains(category) {
-            ordered.append(category)
+        let rankByCategory = items.reduce(into: [String: Int]()) { partial, item in
+            guard let rank = item.categoryRank else { return }
+            let key = item.effectiveCategory
+            if let existing = partial[key] {
+                partial[key] = min(existing, rank)
+            } else {
+                partial[key] = rank
+            }
         }
 
-        var seen = Set(ordered)
-        let remaining = items
-            .map(\.category)
-            .filter { category in
-                guard grouped.contains(category) else { return false }
-                return seen.insert(category).inserted
+        let sorted = grouped.sorted { lhs, rhs in
+            let lhsRank = rankByCategory[lhs] ?? Int.max
+            let rhsRank = rankByCategory[rhs] ?? Int.max
+            if lhsRank != rhsRank {
+                return lhsRank < rhsRank
             }
-        ordered.append(contentsOf: remaining)
-        return ordered
+
+            let lhsPriority = sourcePriority.firstIndex(of: lhs) ?? Int.max
+            let rhsPriority = sourcePriority.firstIndex(of: rhs) ?? Int.max
+            if lhsPriority != rhsPriority {
+                return lhsPriority < rhsPriority
+            }
+
+            return lhs.localizedStandardCompare(rhs) == .orderedAscending
+        }
+
+        return sorted
     }
 
     static func orderedItems(_ items: [MenuItem], in section: MenuSection) -> [MenuItem] {
@@ -227,6 +240,12 @@ enum MenuCategoryMapping {
         }
 
         return items.sorted { lhs, rhs in
+            let leftBackendRank = lhs.itemRank ?? Int.max
+            let rightBackendRank = rhs.itemRank ?? Int.max
+            if leftBackendRank != rightBackendRank {
+                return leftBackendRank < rightBackendRank
+            }
+
             let leftRank = itemPriorityRank(lhs, keywords: keywords)
             let rightRank = itemPriorityRank(rhs, keywords: keywords)
             if leftRank != rightRank {
@@ -266,7 +285,7 @@ enum MenuCategoryMapping {
     }
 
     private static func hasStrongDrinkSignal(_ item: MenuItem) -> Bool {
-        let sources = [item.name, item.category] + item.tags + [item.sectionHint ?? ""]
+        let sources = [item.name, item.effectiveCategory] + item.tags + [item.sectionHint ?? ""]
         for source in sources {
             let normalized = normalize(source)
             guard !normalized.isEmpty else { continue }
@@ -278,7 +297,7 @@ enum MenuCategoryMapping {
     }
 
     private static func itemPriorityRank(_ item: MenuItem, keywords: [String]) -> Int {
-        let sources = [item.category, item.name] + item.tags
+        let sources = [item.effectiveCategory, item.name] + item.tags
         let haystack = sources
             .map { normalize($0) }
             .joined(separator: " ")

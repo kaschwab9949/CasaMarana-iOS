@@ -233,6 +233,7 @@ struct SnakeGameView: View {
                             .padding(30)
                             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
                             .shadow(radius: 10)
+                            .zIndex(2)
                         }
                     }
                     .frame(width: boardSide, height: boardSide)
@@ -252,23 +253,6 @@ struct SnakeGameView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 24)
                     .accessibilityIdentifier("snake.instructions")
-
-                HStack(spacing: 12) {
-                    Button(isPaused ? "Resume" : "Pause") {
-                        if isPaused {
-                            resumeGame()
-                        } else {
-                            pauseGame()
-                        }
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button("New Game") {
-                        resetGame()
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .padding(.horizontal)
 
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
@@ -353,26 +337,14 @@ struct SnakeGameView: View {
                 }
                 .padding(.horizontal)
                 .accessibilityIdentifier("snake.leaderboard.section")
-
-                HStack(spacing: 10) {
-                    Circle()
-                        .fill(.red.gradient)
-                        .frame(width: 10, height: 10)
-                    Text("+10 Food")
-                        .font(.caption)
-                    Image(systemName: "star.fill")
-                        .foregroundStyle(.yellow)
-                        .font(.caption)
-                    Text("+25 Bonus")
-                        .font(.caption)
-                }
-                .foregroundStyle(.secondary)
-                .padding(.bottom, 8)
             }
             .frame(maxWidth: .infinity, alignment: .top)
-            .padding(.bottom, 96)
+            .padding(.bottom, 12)
         }
         .scrollDisabled(isInteractingWithBoard)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            bottomControlBar
+        }
         .onDisappear {
             isInteractingWithBoard = false
         }
@@ -684,6 +656,47 @@ struct SnakeGameView: View {
         case .sync:
             return "Could not sync your score right now."
         }
+    }
+
+    @ViewBuilder
+    private var bottomControlBar: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                Button(isPaused ? "Resume" : "Pause") {
+                    if isPaused {
+                        resumeGame()
+                    } else {
+                        pauseGame()
+                    }
+                }
+                .buttonStyle(.bordered)
+
+                Button("New Game") {
+                    resetGame()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .accessibilityIdentifier("snake.controls")
+
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(.red.gradient)
+                    .frame(width: 10, height: 10)
+                Text("+10 Food")
+                    .font(.caption)
+                Image(systemName: "star.fill")
+                    .foregroundStyle(.yellow)
+                    .font(.caption)
+                Text("+25 Bonus")
+                    .font(.caption)
+            }
+            .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 10)
+        .background(.ultraThinMaterial)
     }
 
     private func isLocalPlayerEntry(_ entry: SnakeLeaderboardEntry) -> Bool {

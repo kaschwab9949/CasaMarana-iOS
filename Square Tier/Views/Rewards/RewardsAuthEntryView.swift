@@ -42,17 +42,16 @@ struct SignInView: View {
                     .font(.largeTitle)
                     .fontWeight(.bold)
 
-                Text("Sign in with the same phone number and 4-digit PIN from your Casa Marana app login.")
+                Text("Use the same phone number and 4-digit PIN you created for your Casa Marana app login.")
                     .font(.body)
                     .foregroundStyle(.secondary)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Quick steps")
+                    Text("Sign-in steps")
                         .font(.footnote.weight(.semibold))
-                    Text("1. New customer? Tap Create App Login once.")
-                    Text("2. Verify your phone by text, then create your 4-digit PIN.")
-                    Text("3. Enter that same phone number and PIN here.")
-                    Text("4. Tap Sign In to load your Square rewards.")
+                    Text("1. New customer? Tap Create App Login.")
+                    Text("2. Verify your phone and create a 4-digit PIN.")
+                    Text("3. Return here and sign in with that same phone + PIN.")
                 }
                 .font(.footnote)
                 .foregroundStyle(.secondary)

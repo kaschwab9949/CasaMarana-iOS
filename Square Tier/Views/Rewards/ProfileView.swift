@@ -56,13 +56,13 @@ struct ProfileView: View {
                         return
                     }
 
-                    guard isValidCustomerEmail(draft.email) else {
-                        formError = "Please enter a valid email address."
+                    guard isValidCustomerEmailRequired(draft.email) else {
+                        formError = "Email is required. Enter a valid email address."
                         return
                     }
 
-                    guard let normalizedBirthday = normalizeCustomerBirthday(draft.birthday) else {
-                        formError = "Birthday must use MM/DD/YY format."
+                    guard let normalizedBirthday = normalizeCustomerBirthdayRequired(draft.birthday) else {
+                        formError = "Birthday is required and must use MM/DD/YY format."
                         return
                     }
 

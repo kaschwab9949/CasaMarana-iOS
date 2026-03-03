@@ -72,11 +72,7 @@ struct RewardsPreviewView: View {
             }
             
             Section {
-                Label("Wallet pass includes business, points, membership date, name, and phone.", systemImage: "wallet.pass")
-                    .foregroundStyle(.secondary)
-                    .font(.footnote)
-
-                Text("Adding loyalty passes is only available on iOS devices.")
+                Label("After sign-in, you can add your rewards pass to Apple Wallet.", systemImage: "wallet.pass")
                     .foregroundStyle(.secondary)
                     .font(.footnote)
             }

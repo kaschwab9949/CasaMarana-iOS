@@ -41,6 +41,18 @@ final class Casa_MaranaTests: XCTestCase {
         XCTAssertNil(normalizeCustomerBirthday("13/07/21"))
     }
 
+    func testRequiredEmailValidationRejectsEmptyEmail() {
+        XCTAssertFalse(isValidCustomerEmailRequired(""))
+        XCTAssertFalse(isValidCustomerEmailRequired("   "))
+        XCTAssertTrue(isValidCustomerEmailRequired("member@casamarana.com"))
+    }
+
+    func testNormalizeCustomerBirthdayRequiredRejectsEmptyBirthday() {
+        XCTAssertNil(normalizeCustomerBirthdayRequired(""))
+        XCTAssertNil(normalizeCustomerBirthdayRequired(" "))
+        XCTAssertEqual(normalizeCustomerBirthdayRequired("9/7/21"), "09/07/21")
+    }
+
     func testUserProfileRoundTripCodable() throws {
         let original = UserProfile(
             fullName: "Test Member",
@@ -196,6 +208,41 @@ final class Casa_MaranaTests: XCTestCase {
             sectionHint: "food"
         )
         XCTAssertEqual(MenuCategoryMapping.classify(item), .drinks)
+    }
+
+    func testMenuCategoryOrderingUsesBackendCategoryRank() {
+        let drinks = [
+            MenuItem(
+                id: "8",
+                name: "House Margarita",
+                description: "",
+                price: "$10.00",
+                category: "Menu",
+                displayCategory: "Mixed Drinks",
+                tags: ["Mixed Drinks"],
+                sectionHint: "drink",
+                sectionRank: 1,
+                categoryRank: 0,
+                itemRank: 2
+            ),
+            MenuItem(
+                id: "9",
+                name: "Cabernet",
+                description: "",
+                price: "$9.00",
+                category: "Menu",
+                displayCategory: "Wine",
+                tags: ["Wine"],
+                sectionHint: "drink",
+                sectionRank: 1,
+                categoryRank: 3,
+                itemRank: 1
+            )
+        ]
+
+        let ordered = MenuCategoryMapping.orderedCategories(in: .drinks, items: drinks)
+        XCTAssertEqual(ordered.first, "Mixed Drinks")
+        XCTAssertEqual(ordered.dropFirst().first, "Wine")
     }
 
     func testCMHTTPApplyAuthHeadersAPIKeyMode() {

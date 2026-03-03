@@ -57,13 +57,6 @@ struct RewardsWalletView: View {
         return "••• ••• \(suffix)"
     }
 
-    private func maskedPhone(_ raw: String?) -> String? {
-        guard let raw else { return nil }
-        let digits = raw.filter(\.isNumber)
-        guard digits.count >= 4 else { return nil }
-        return "••• ••• \(digits.suffix(4))"
-    }
-
     private func parseDate(_ raw: String?) -> Date? {
         guard let raw else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -144,50 +137,6 @@ struct RewardsWalletView: View {
             return match.benefits
         }
         return ["In-store loyalty reward"]
-    }
-
-    private func customerSegmentLabels(for status: LoyaltyStatusResponse) -> [String] {
-        var labels = status.customerSegments.map { segment in
-            let name = segment.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return name.isEmpty ? segment.id : name
-        }
-
-        if labels.isEmpty {
-            labels = status.segmentIDs
-        }
-
-        var seen = Set<String>()
-        var uniqueLabels: [String] = []
-        for label in labels {
-            let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-            if seen.insert(trimmed).inserted {
-                uniqueLabels.append(trimmed)
-            }
-        }
-        return uniqueLabels
-    }
-
-    private func customerGroupLabels(for status: LoyaltyStatusResponse) -> [String] {
-        var labels = status.customerGroups.map { group in
-            let name = group.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return name.isEmpty ? group.id : name
-        }
-
-        if labels.isEmpty {
-            labels = status.groupIDs
-        }
-
-        var seen = Set<String>()
-        var uniqueLabels: [String] = []
-        for label in labels {
-            let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-            if seen.insert(trimmed).inserted {
-                uniqueLabels.append(trimmed)
-            }
-        }
-        return uniqueLabels
     }
 
     private func loadStatus() async {
@@ -435,7 +384,7 @@ struct RewardsWalletView: View {
                         .accessibilityIdentifier("rewards.wallet.loadStateText")
                 }
 
-                Text("Points, balance, and loyalty status are pulled directly from Square using this verified phone.")
+                Text("Your rewards status is loaded directly from Square using this verified phone.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
@@ -518,24 +467,6 @@ struct RewardsWalletView: View {
                                     .foregroundStyle(.secondary)
                             }
 
-                            if let squarePhone = maskedPhone(s.phoneNumber), squarePhone != maskedLookupPhone {
-                                Label("Square phone on file: \(squarePhone)", systemImage: "phone")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            if let lifetimePoints = accountSummary?.lifetimePoints, lifetimePoints > 0 {
-                                Label("Lifetime points earned: \(lifetimePoints)", systemImage: "chart.line.uptrend.xyaxis")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            if let squareBalance = accountSummary?.balance, squareBalance > 0, squareBalance != s.points {
-                                Label("Square balance: \(squareBalance) pts", systemImage: "number.circle")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-
                         }
                         .padding(.vertical, 8)
                     } else {
@@ -588,30 +519,6 @@ struct RewardsWalletView: View {
                     ForEach(Array(availableRewards(for: s).prefix(6).enumerated()), id: \.offset) { _, item in
                         Text(item)
                     }
-                }
-            }
-
-            if let s = status, s.enrolled, !customerSegmentLabels(for: s).isEmpty {
-                Section("Customer Segments") {
-                    ForEach(Array(customerSegmentLabels(for: s).prefix(6)), id: \.self) { segment in
-                        Text(segment)
-                    }
-
-                    Text("Segments are managed in Square Dashboard and synced read-only in the app.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if let s = status, s.enrolled, !customerGroupLabels(for: s).isEmpty {
-                Section("Customer Groups") {
-                    ForEach(Array(customerGroupLabels(for: s).prefix(6)), id: \.self) { group in
-                        Text(group)
-                    }
-
-                    Text("Groups are manual collections managed in Square Dashboard and synced read-only in the app.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                 }
             }
 

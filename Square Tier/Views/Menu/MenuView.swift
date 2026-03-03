@@ -7,8 +7,12 @@ struct MenuItem: Identifiable {
     let description: String
     let price: String
     let category: String
+    let displayCategory: String?
     let tags: [String]
     let sectionHint: String?
+    let sectionRank: Int?
+    let categoryRank: Int?
+    let itemRank: Int?
 
     init(
         id: String,
@@ -16,16 +20,35 @@ struct MenuItem: Identifiable {
         description: String,
         price: String,
         category: String,
+        displayCategory: String? = nil,
         tags: [String],
-        sectionHint: String? = nil
+        sectionHint: String? = nil,
+        sectionRank: Int? = nil,
+        categoryRank: Int? = nil,
+        itemRank: Int? = nil
     ) {
         self.id = id
         self.name = name
         self.description = description
         self.price = price
         self.category = category
+        self.displayCategory = displayCategory
         self.tags = tags
         self.sectionHint = sectionHint
+        self.sectionRank = sectionRank
+        self.categoryRank = categoryRank
+        self.itemRank = itemRank
+    }
+}
+
+extension MenuItem {
+    var effectiveCategory: String {
+        let preferred = displayCategory?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !preferred.isEmpty {
+            return preferred
+        }
+        let fallback = category.trimmingCharacters(in: .whitespacesAndNewlines)
+        return fallback.isEmpty ? "Menu" : fallback
     }
 }
 
@@ -83,7 +106,7 @@ final class MenuData: ObservableObject {
 struct MenuView: View {
     @StateObject private var menuData = MenuData()
     @State private var searchText = ""
-    @State private var selectedSection: MenuSection = .drinks
+    @State private var selectedSection: MenuSection = .food
     @State private var searchAllSections = false
 
     private var sectionScopedItems: [MenuItem] {
@@ -133,7 +156,7 @@ struct MenuView: View {
 
     private func items(in category: String) -> [MenuItem] {
         let categoryItems = filteredItems
-            .filter { $0.category == category }
+            .filter { $0.effectiveCategory == category }
         let effectiveSection: MenuSection = searchAllSections ? .other : selectedSection
         return MenuCategoryMapping.orderedItems(categoryItems, in: effectiveSection)
     }
