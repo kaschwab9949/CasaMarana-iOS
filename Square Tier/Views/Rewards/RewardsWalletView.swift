@@ -203,6 +203,30 @@ struct RewardsWalletView: View {
         }
     }
 
+    private func addWalletPassTapped() {
+        Task {
+            if status == nil {
+                await loadStatus()
+            }
+
+            guard let s = status else {
+                await MainActor.run {
+                    self.errorText = "Load rewards first, then try adding your Wallet pass."
+                }
+                return
+            }
+
+            guard s.enrolled else {
+                await MainActor.run {
+                    self.errorText = "This phone is not enrolled in Square Loyalty yet, so a Wallet pass cannot be added."
+                }
+                return
+            }
+
+            await buildAndPresentPass()
+        }
+    }
+
     var body: some View {
         List {
             Section {
@@ -223,6 +247,49 @@ struct RewardsWalletView: View {
                         .accessibilityIdentifier("rewards.wallet.errorText")
                 }
 
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Apple Wallet Pass")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    if let s = status, s.enrolled {
+                        AddToWalletButton {
+                            addWalletPassTapped()
+                        }
+                        .frame(height: 50)
+                        .padding(.top, 4)
+                        .accessibilityIdentifier("rewards.wallet.addToWalletButton")
+
+                        Text("Add your rewards pass to Apple Wallet for quick check-in at checkout.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Button {
+                            addWalletPassTapped()
+                        } label: {
+                            Label("Add to Apple Wallet", systemImage: "wallet.pass")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("rewards.wallet.addToWalletFallbackButton")
+
+                        if isLoading {
+                            Text("Checking rewards enrollment…")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        } else if status != nil {
+                            Text("Finish Square Loyalty enrollment in-store, then tap Refresh to enable pass creation.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Tap Refresh to load your rewards account, then add your pass.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(.vertical, 8)
+
                 if let s = status {
                     if s.enrolled {
                         VStack(alignment: .leading, spacing: 8) {
@@ -238,13 +305,6 @@ struct RewardsWalletView: View {
                             Text("\(s.points) pts")
                                 .font(.headline)
                                 .fontWeight(.semibold)
-
-                            AddToWalletButton {
-                                Task { await buildAndPresentPass() }
-                            }
-                            .frame(height: 50)
-                            .padding(.top, 12)
-                            .accessibilityIdentifier("rewards.wallet.addToWalletButton")
 
                             Text("Your loyalty pass shows the business name, available point balance, membership start date, account holder name, and phone number.")
                                 .font(.footnote)
