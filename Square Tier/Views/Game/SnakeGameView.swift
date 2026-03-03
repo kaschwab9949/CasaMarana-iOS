@@ -255,7 +255,7 @@ struct SnakeGameView: View {
 
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        Text("Global Leaderboard")
+                        Text("Rewards Members Leaderboard")
                             .font(.headline)
                         Spacer()
                         if isLoadingLeaderboard || isSubmittingLeaderboardScore {
@@ -307,12 +307,16 @@ struct SnakeGameView: View {
                                                 .font(.subheadline.monospacedDigit())
                                                 .bold()
                                         }
-                                        .foregroundStyle(entry.isCurrentUser ? .mint : .primary)
+                                        .foregroundStyle(isLocalPlayerEntry(entry) ? .mint : .primary)
                                     }
                                 }
                             }
                             .frame(maxHeight: 220)
                         }
+
+                        Text("Showing top scores across all rewards members.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
 
                         if verifiedPhoneE164 == nil {
                             Text("Sign in with a verified phone to publish your high score.")
@@ -540,7 +544,7 @@ struct SnakeGameView: View {
                     displayName: displayName,
                     score: best
                 )
-                let entries = try await leaderboardAPI.fetchLeaderboard(limit: 100, phoneE164: phone)
+                let entries = try await leaderboardAPI.fetchLeaderboard(limit: 100, phoneE164: nil)
 
                 await MainActor.run {
                     self.lastSubmittedHighScore = max(self.lastSubmittedHighScore, saved)
@@ -564,7 +568,7 @@ struct SnakeGameView: View {
         }
 
         do {
-            let entries = try await leaderboardAPI.fetchLeaderboard(limit: 100, phoneE164: verifiedPhoneE164)
+            let entries = try await leaderboardAPI.fetchLeaderboard(limit: 100, phoneE164: nil)
             await MainActor.run {
                 leaderboardEntries = entries
                 isLoadingLeaderboard = false
@@ -650,6 +654,17 @@ struct SnakeGameView: View {
         case .sync:
             return "Could not sync your score right now."
         }
+    }
+
+    private func isLocalPlayerEntry(_ entry: SnakeLeaderboardEntry) -> Bool {
+        if entry.isCurrentUser {
+            return true
+        }
+
+        let localName = leaderboardDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !localName.isEmpty else { return false }
+        return entry.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            .localizedCaseInsensitiveCompare(localName) == .orderedSame
     }
 
     private func resetGame() {
