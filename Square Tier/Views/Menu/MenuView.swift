@@ -132,9 +132,10 @@ struct MenuView: View {
     }
 
     private func items(in category: String) -> [MenuItem] {
-        filteredItems
+        let categoryItems = filteredItems
             .filter { $0.category == category }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        let effectiveSection: MenuSection = searchAllSections ? .other : selectedSection
+        return MenuCategoryMapping.orderedItems(categoryItems, in: effectiveSection)
     }
 
     private var showsOperationalFoodEmptyState: Bool {

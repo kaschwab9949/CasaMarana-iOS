@@ -370,6 +370,7 @@ struct SnakeGameView: View {
                 .padding(.bottom, 8)
             }
             .frame(maxWidth: .infinity, alignment: .top)
+            .padding(.bottom, 96)
         }
         .scrollDisabled(isInteractingWithBoard)
         .onDisappear {

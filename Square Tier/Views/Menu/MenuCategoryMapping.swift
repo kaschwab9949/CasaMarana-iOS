@@ -83,6 +83,41 @@ enum MenuCategoryMapping {
         "Whiskey/Scotch", "Tequila/Mezcal", "Vodka", "Gin", "Rum", "Brandy/Cognac", "Cordials", "Non Alch"
     ]
 
+    private static let foodItemPriorityKeywords = [
+        "starter",
+        "appetizer",
+        "small plate",
+        "salad",
+        "soup",
+        "panini",
+        "sandwich",
+        "pizza",
+        "entree",
+        "pasta",
+        "dessert",
+        "side"
+    ]
+
+    private static let drinkItemPriorityKeywords = [
+        "cocktail",
+        "margarita",
+        "martini",
+        "draft beer",
+        "beer",
+        "wine",
+        "whiskey",
+        "tequila",
+        "mezcal",
+        "vodka",
+        "gin",
+        "rum",
+        "brandy",
+        "cordial",
+        "seltzer",
+        "non alch",
+        "soda"
+    ]
+
     private static let strongDrinkSignals = [
         "package",
         "beer",
@@ -165,11 +200,40 @@ enum MenuCategoryMapping {
             ordered.append(category)
         }
 
-        let remaining = grouped
-            .subtracting(ordered)
-            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        var seen = Set(ordered)
+        let remaining = items
+            .map(\.category)
+            .filter { category in
+                guard grouped.contains(category) else { return false }
+                return seen.insert(category).inserted
+            }
         ordered.append(contentsOf: remaining)
         return ordered
+    }
+
+    static func orderedItems(_ items: [MenuItem], in section: MenuSection) -> [MenuItem] {
+        let keywords: [String]
+        switch section {
+        case .food:
+            keywords = foodItemPriorityKeywords
+        case .drinks:
+            keywords = drinkItemPriorityKeywords
+        case .other:
+            keywords = []
+        }
+
+        if keywords.isEmpty {
+            return items.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        }
+
+        return items.sorted { lhs, rhs in
+            let leftRank = itemPriorityRank(lhs, keywords: keywords)
+            let rightRank = itemPriorityRank(rhs, keywords: keywords)
+            if leftRank != rightRank {
+                return leftRank < rightRank
+            }
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+        }
     }
 
     private static func normalize(_ value: String) -> String {
@@ -211,5 +275,18 @@ enum MenuCategoryMapping {
             }
         }
         return false
+    }
+
+    private static func itemPriorityRank(_ item: MenuItem, keywords: [String]) -> Int {
+        let sources = [item.category, item.name] + item.tags
+        let haystack = sources
+            .map { normalize($0) }
+            .joined(separator: " ")
+
+        guard !haystack.isEmpty else { return keywords.count + 1 }
+        for (index, keyword) in keywords.enumerated() where haystack.contains(keyword) {
+            return index
+        }
+        return keywords.count + 1
     }
 }

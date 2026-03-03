@@ -536,17 +536,6 @@ struct RewardsWalletView: View {
                                     .foregroundStyle(.secondary)
                             }
 
-                            Text("Your loyalty pass shows the business name, available point balance, membership start date, account holder name, and phone number.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-
-                            Text("After adding it to Wallet, tap the seller display or contactless reader at checkout to check in, earn points, and redeem rewards.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-
-                            Text("Adding loyalty passes is only available on iOS devices.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
                         }
                         .padding(.vertical, 8)
                     } else {
