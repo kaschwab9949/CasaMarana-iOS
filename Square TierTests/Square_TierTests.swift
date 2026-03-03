@@ -132,6 +132,45 @@ final class Casa_MaranaTests: XCTestCase {
         XCTAssertEqual(MenuCategoryMapping.classify(item), .drinks)
     }
 
+    func testMenuCategoryMappingUsesSquareTagWhenCategoryIsMenu() {
+        let item = MenuItem(
+            id: "4",
+            name: "Anejo Azul",
+            description: "",
+            price: "$12.00",
+            category: "Menu",
+            tags: ["Spirits", "Tequila/Mezcal", "Drinks"],
+            sectionHint: nil
+        )
+        XCTAssertEqual(MenuCategoryMapping.classify(item), .drinks)
+    }
+
+    func testMenuCategoryMappingUsesCategoryWhenSectionHintIsOther() {
+        let item = MenuItem(
+            id: "5",
+            name: "Martini",
+            description: "",
+            price: "$14.00",
+            category: "Cocktails",
+            tags: ["Drinks"],
+            sectionHint: "other"
+        )
+        XCTAssertEqual(MenuCategoryMapping.classify(item), .drinks)
+    }
+
+    func testMenuCategoryMappingDoesNotTreatGenericMenuWordAsFood() {
+        let item = MenuItem(
+            id: "6",
+            name: "Weekend Menu",
+            description: "",
+            price: "",
+            category: "Menu",
+            tags: [],
+            sectionHint: nil
+        )
+        XCTAssertEqual(MenuCategoryMapping.classify(item), .other)
+    }
+
     func testCMHTTPApplyAuthHeadersAPIKeyMode() {
         var request = URLRequest(url: URL(string: "https://casa-marana-backend.vercel.app")!)
         let applied = CMHTTP.applyAuthHeaders(&request, apiKey: "abc123", authHeaderMode: .apiKey)

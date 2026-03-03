@@ -17,9 +17,16 @@ enum MenuSection: String, CaseIterable, Identifiable {
 }
 
 enum MenuCategoryMapping {
-    // Business-priority category mapping. Exact category matches win first.
+    // Business-priority category mapping from Square taxonomy. Exact matches win first.
     private static let explicitCategoryMap: [String: MenuSection] = [
         "food": .food,
+        "foods": .food,
+        "drinks": .drinks,
+        "drink": .drinks,
+        "beverages": .drinks,
+        "beverage": .drinks,
+        "bar": .drinks,
+
         "food menu": .food,
         "starters": .food,
         "appetizers": .food,
@@ -56,7 +63,7 @@ enum MenuCategoryMapping {
     ]
 
     private static let foodKeywords = [
-        "food", "menu", "pizza", "burger", "fries", "salad", "soup",
+        "food", "pizza", "burger", "fries", "salad", "soup",
         "appetizer", "entree", "dessert", "sandwich", "wings", "nachos",
         "tacos", "pasta", "steak", "chicken", "shrimp", "plate", "bowl"
     ]
@@ -77,17 +84,9 @@ enum MenuCategoryMapping {
     ]
 
     static func classify(_ item: MenuItem) -> MenuSection {
-        if let sectionHint = item.sectionHint?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-            switch sectionHint {
-            case "food":
-                return .food
-            case "drink", "drinks":
-                return .drinks
-            case "other":
-                return .other
-            default:
-                break
-            }
+        let squareSection = sectionFromHint(item.sectionHint)
+        if let squareSection, squareSection != .other {
+            return squareSection
         }
 
         let normalizedCategory = normalize(item.category)
@@ -95,19 +94,30 @@ enum MenuCategoryMapping {
             return explicit
         }
 
-        let categoryAndName = "\(item.category) \(item.name)"
-        if containsKeyword(categoryAndName, from: foodKeywords) {
-            return .food
-        }
-        if containsKeyword(categoryAndName, from: drinkKeywords) {
-            return .drinks
+        for tag in item.tags {
+            if let explicit = explicitCategoryMap[normalize(tag)] {
+                return explicit
+            }
         }
 
-        if containsKeyword(item.tags.joined(separator: " "), from: foodKeywords) {
+        // Use name-first heuristics only when Square does not provide a clear section.
+        if containsKeyword(item.name, from: drinkKeywords) {
+            return .drinks
+        }
+        if containsKeyword(item.name, from: foodKeywords) {
             return .food
         }
-        if containsKeyword(item.tags.joined(separator: " "), from: drinkKeywords) {
+
+        // Category string fallback remains secondary and does not include weak tokens like "menu".
+        if containsKeyword(item.category, from: drinkKeywords) {
             return .drinks
+        }
+        if containsKeyword(item.category, from: foodKeywords) {
+            return .food
+        }
+
+        if squareSection == .other {
+            return .other
         }
 
         return .other
@@ -147,5 +157,22 @@ enum MenuCategoryMapping {
         let haystack = normalize(value)
         guard !haystack.isEmpty else { return false }
         return keywords.contains { haystack.contains($0) }
+    }
+
+    private static func sectionFromHint(_ raw: String?) -> MenuSection? {
+        let hint = normalize(raw ?? "")
+        guard !hint.isEmpty else { return nil }
+
+        if hint.contains("drink") || hint.contains("beverage") || hint.contains("bar") {
+            return .drinks
+        }
+        if hint.contains("food") || hint.contains("kitchen") {
+            return .food
+        }
+        if hint.contains("other") {
+            return .other
+        }
+
+        return explicitCategoryMap[hint]
     }
 }
