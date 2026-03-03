@@ -8,6 +8,8 @@ enum BackendRoute {
 
     static let phoneStart = ["api", "auth", "phone", "start"]
     static let phoneVerify = ["api", "auth", "phone", "verify"]
+    static let phoneStartLegacy = ["api", "phone", "start"]
+    static let phoneVerifyLegacy = ["api", "phone", "verify"]
 
     static let snakeLeaderboard = ["api", "snake", "leaderboard"]
     static let snakeScore = ["api", "snake", "score"]
@@ -35,6 +37,14 @@ enum BackendRoute {
 
     static var menuCandidates: [[String]] {
         [menuCanonical, menuAliasItems, menuAliasCatalog]
+    }
+
+    static var phoneStartCandidates: [[String]] {
+        [phoneStart, phoneStartLegacy]
+    }
+
+    static var phoneVerifyCandidates: [[String]] {
+        [phoneVerify, phoneVerifyLegacy]
     }
 
     static func url(for pathComponents: [String], baseURL: URL = AppConfig.backendBaseURL) -> URL {

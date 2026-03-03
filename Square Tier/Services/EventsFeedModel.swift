@@ -14,6 +14,18 @@ private enum HTTP {
     }()
 }
 
+#if DEBUG
+extension EventsFeedModel {
+    static func debugExtractEventURLs(from html: String) -> [URL] {
+        extractEventURLs(from: html)
+    }
+
+    static func debugExtractEventsFromListingCards(from html: String) -> [CasaEvent] {
+        extractEventsFromListingCards(listingHTML: html)
+    }
+}
+#endif
+
 struct EventsParserDiagnostics {
     var linksFound: Int = 0
     var pagesParsed: Int = 0
@@ -93,6 +105,12 @@ final class EventsFeedModel: ObservableObject {
         var req = URLRequest(url: url)
         req.cachePolicy = .reloadIgnoringLocalCacheData
         req.timeoutInterval = 25
+        req.setValue(
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile",
+            forHTTPHeaderField: "User-Agent"
+        )
+        req.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
+        req.setValue(Locale.preferredLanguages.prefix(3).joined(separator: ", "), forHTTPHeaderField: "Accept-Language")
 
         let (data, resp) = try await HTTP.session.data(for: req)
         guard let http = resp as? HTTPURLResponse else { throw URLError(.badServerResponse) }
@@ -143,7 +161,7 @@ final class EventsFeedModel: ObservableObject {
             let urlsToFetch = Array(eventURLs.prefix(25))
             diagnostics.pagesParsed = urlsToFetch.count
 
-            let maxConcurrentFetches = 6
+            let maxConcurrentFetches = 4
             var parsed: [CasaEvent] = await withTaskGroup(of: [CasaEvent].self, returning: [CasaEvent].self) { group in
                 func addTask(for url: URL) {
                     group.addTask {
@@ -171,6 +189,14 @@ final class EventsFeedModel: ObservableObject {
 
             if Task.isCancelled {
                 return
+            }
+
+            if parsed.isEmpty {
+                let listingCardFallback = Self.extractEventsFromListingCards(listingHTML: listingHTML)
+                if !listingCardFallback.isEmpty {
+                    parsed = listingCardFallback
+                    diagnostics.usedListingFallback = true
+                }
             }
 
             if parsed.isEmpty {
@@ -441,7 +467,7 @@ final class EventsFeedModel: ObservableObject {
         // Look for links to paths that start with /events/ or /botanica-events/
         // Only casamarana.com absolute paths, or root-relative paths.
 
-        guard let regex = try? NSRegularExpression(pattern: "href\\s*=\\s*\"([^\"]+)\"", options: .caseInsensitive) else { return [] }
+        guard let regex = try? NSRegularExpression(pattern: "href\\s*=\\s*(['\"])(.*?)\\1", options: .caseInsensitive) else { return [] }
 
         let ns = listingHTML as NSString
         let matches = regex.matches(in: listingHTML, range: NSRange(location: 0, length: ns.length))
@@ -468,6 +494,7 @@ final class EventsFeedModel: ObservableObject {
 
             // Filter out non-event links (like the top navigation Calendar link)
             guard lowerPath.hasPrefix("/events/") || lowerPath.hasPrefix("/botanica-events/") else { return }
+            if lowerPath == "/events/" || lowerPath == "/events" { return }
 
             // Skip the calendar aggregate view
             if lowerPath.hasSuffix("/calendar") { return }
@@ -485,12 +512,173 @@ final class EventsFeedModel: ObservableObject {
         }
 
         for m in matches {
-            guard m.numberOfRanges >= 2 else { continue }
-            let href = ns.substring(with: m.range(at: 1))
+            guard m.numberOfRanges >= 3 else { continue }
+            let href = ns.substring(with: m.range(at: 2))
             addURLString(href)
         }
 
         return urls
+    }
+
+    private static func extractEventsFromListingCards(listingHTML: String) -> [CasaEvent] {
+        guard let articleRegex = try? NSRegularExpression(
+            pattern: #"<article[^>]*class=['"][^'"]*eventlist-event[^'"]*['"][^>]*>(.*?)</article>"#,
+            options: [.dotMatchesLineSeparators, .caseInsensitive]
+        ) else {
+            return []
+        }
+
+        let ns = listingHTML as NSString
+        let matches = articleRegex.matches(in: listingHTML, range: NSRange(location: 0, length: ns.length))
+        var events: [CasaEvent] = []
+
+        for match in matches {
+            guard match.numberOfRanges >= 2 else { continue }
+            let block = ns.substring(with: match.range(at: 1))
+
+            guard let href = firstCapture(
+                in: block,
+                pattern: #"class=['"][^'"]*eventlist-title-link[^'"]*['"][^>]*href\s*=\s*['"]([^'"]+)['"]"#,
+                options: [.dotMatchesLineSeparators, .caseInsensitive]
+            ) ?? firstCapture(
+                in: block,
+                pattern: #"href\s*=\s*['"]([^'"]+)['"]"#,
+                options: [.dotMatchesLineSeparators, .caseInsensitive]
+            ),
+            let url = absoluteCasaEventsURL(from: href) else { continue }
+
+            let titleRaw = firstCapture(
+                in: block,
+                pattern: #"<h1[^>]*class=['"][^'"]*eventlist-title[^'"]*['"][^>]*>\s*<a[^>]*>(.*?)</a>"#,
+                options: [.dotMatchesLineSeparators, .caseInsensitive]
+            ) ?? ""
+            let title = sanitizeTitle(normalizeListingText(titleRaw))
+
+            let dateISO = firstCapture(
+                in: block,
+                pattern: #"class=['"][^'"]*event-date[^'"]*['"][^>]*datetime=['"]([^'"]+)['"]"#,
+                options: [.dotMatchesLineSeparators, .caseInsensitive]
+            )
+            let startText = firstCapture(
+                in: block,
+                pattern: #"class=['"][^'"]*event-time-localized-start[^'"]*['"][^>]*>(.*?)</time>"#,
+                options: [.dotMatchesLineSeparators, .caseInsensitive]
+            )
+            let endText = firstCapture(
+                in: block,
+                pattern: #"class=['"][^'"]*event-time-localized-end[^'"]*['"][^>]*>(.*?)</time>"#,
+                options: [.dotMatchesLineSeparators, .caseInsensitive]
+            )
+
+            let startDate = parseListingDateAndTime(dateISO: dateISO, timeText: startText)
+            let endDate = parseListingDateAndTime(dateISO: dateISO, timeText: endText)
+
+            let summaryRaw = firstCapture(
+                in: block,
+                pattern: #"<div[^>]*class=['"][^'"]*eventlist-description[^'"]*['"][^>]*>(.*?)</div>"#,
+                options: [.dotMatchesLineSeparators, .caseInsensitive]
+            ) ?? ""
+            let summaryText = normalizeListingText(summaryRaw)
+            let summary = summaryText.isEmpty ? nil : String(summaryText.prefix(220))
+
+            let locationRaw = firstCapture(
+                in: block,
+                pattern: #"<li[^>]*class=['"][^'"]*eventlist-meta-address[^'"]*['"][^>]*>(.*?)</li>"#,
+                options: [.dotMatchesLineSeparators, .caseInsensitive]
+            ) ?? ""
+            let locationText = normalizeListingText(locationRaw)
+                .replacingOccurrences(of: "(map)", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let locationAddress = locationText.isEmpty ? nil : locationText
+
+            events.append(
+                CasaEvent(
+                    id: "listing-card:\(url.absoluteString)",
+                    title: title,
+                    startDate: startDate,
+                    endDate: endDate,
+                    summary: summary,
+                    locationName: nil,
+                    locationAddress: locationAddress,
+                    url: url
+                )
+            )
+        }
+
+        return events
+    }
+
+    private static func firstCapture(
+        in text: String,
+        pattern: String,
+        captureGroup: Int = 1,
+        options: NSRegularExpression.Options = []
+    ) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else { return nil }
+        let ns = text as NSString
+        guard let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)),
+              match.numberOfRanges > captureGroup else { return nil }
+        let range = match.range(at: captureGroup)
+        guard range.location != NSNotFound else { return nil }
+        return ns.substring(with: range)
+    }
+
+    private static func absoluteCasaEventsURL(from rawHref: String) -> URL? {
+        let href = rawHref.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !href.isEmpty else { return nil }
+
+        let absolute: String
+        if href.hasPrefix("/") {
+            absolute = "https://www.casamarana.com" + href
+        } else if href.hasPrefix("https://www.casamarana.com/") ||
+                    href.hasPrefix("http://www.casamarana.com/") ||
+                    href.hasPrefix("https://casamarana.com/") {
+            absolute = href
+        } else {
+            return nil
+        }
+
+        guard var components = URLComponents(string: absolute) else { return nil }
+        components.fragment = nil
+        components.query = nil
+        guard let url = components.url else { return nil }
+
+        let lowerPath = url.path.lowercased()
+        guard lowerPath.hasPrefix("/events/") || lowerPath.hasPrefix("/botanica-events/") else { return nil }
+        if lowerPath == "/events/" || lowerPath == "/events" || lowerPath.hasSuffix("/calendar") { return nil }
+        return url
+    }
+
+    private static func parseListingDateAndTime(dateISO: String?, timeText: String?) -> Date? {
+        guard let dateISO else { return nil }
+        let dateOnly = String(dateISO.prefix(10))
+        guard dateOnly.count == 10 else { return nil }
+
+        let normalizedTime = normalizeListingText(timeText ?? "")
+            .replacingOccurrences(of: ".", with: "")
+            .uppercased()
+        guard !normalizedTime.isEmpty else { return nil }
+
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.timeZone = TimeZone(identifier: "America/Phoenix") ?? .current
+
+        for format in ["yyyy-MM-dd h:mm a", "yyyy-MM-dd h a"] {
+            df.dateFormat = format
+            if let parsed = df.date(from: "\(dateOnly) \(normalizedTime)") {
+                return parsed
+            }
+        }
+
+        return nil
+    }
+
+    private static func normalizeListingText(_ htmlFragment: String) -> String {
+        let stripped = decodeHTMLEntities(stripHTML(htmlFragment))
+            .replacingOccurrences(of: "\u{202f}", with: " ")
+            .replacingOccurrences(of: "\u{00a0}", with: " ")
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        return stripped.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func extractEventsFromListing(listingHTML: String, listingURL: URL) -> [CasaEvent] {

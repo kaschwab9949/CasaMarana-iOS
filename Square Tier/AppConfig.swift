@@ -37,7 +37,17 @@ public enum AppConfig {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         guard !(trimmed.hasPrefix("$(") && trimmed.hasSuffix(")")) else { return nil }
-        return URL(string: trimmed)
+        guard let url = URL(string: trimmed) else { return nil }
+
+        // Reject malformed values (for example "https:" from xcconfig comment parsing).
+        let scheme = (url.scheme ?? "").lowercased()
+        if scheme == "http" || scheme == "https" {
+            guard let host = url.host?.trimmingCharacters(in: .whitespacesAndNewlines), !host.isEmpty else {
+                return nil
+            }
+        }
+
+        return url
     }
 
     private static func normalizedKey(_ raw: String?) -> String? {
@@ -79,6 +89,14 @@ public enum AppConfig {
 #endif
     }
 
+    public static var runtimeAPIKeyOverride: String? {
+#if DEBUG
+        normalizedKey(KeychainService.load(account: runtimeAPIKeyAccount))
+#else
+        return nil
+#endif
+    }
+
     public static var hasRuntimeAPIKeyOverride: Bool {
 #if DEBUG
         normalizedKey(KeychainService.load(account: runtimeAPIKeyAccount)) != nil
@@ -105,12 +123,28 @@ public enum AppConfig {
 
     // API key header value for your backend. Must match backend expectation if configured.
     public static var apiKey: String {
-#if DEBUG
-        if let runtime = normalizedKey(KeychainService.load(account: runtimeAPIKeyAccount)) {
-            return runtime
+        if let runtimeAPIKeyOverride {
+            return runtimeAPIKeyOverride
         }
-#endif
-        return normalizedKey(plistString("CMAPIKey")) ?? ""
+        return bundledAPIKey
+    }
+
+    public static var bundledAPIKey: String {
+        normalizedKey(plistString("CMAPIKey")) ?? ""
+    }
+
+    public static var apiKeyCandidates: [String] {
+        var seen = Set<String>()
+        var candidates: [String] = []
+        let rawCandidates: [String] = [apiKey, runtimeAPIKeyOverride ?? "", bundledAPIKey]
+        for raw in rawCandidates {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if seen.insert(trimmed).inserted {
+                candidates.append(trimmed)
+            }
+        }
+        return candidates
     }
 
     public static var authHeaderMode: AuthHeaderMode {
@@ -118,6 +152,14 @@ public enum AppConfig {
             return runtime
         }
         return parseAuthHeaderMode(plistString("CMAPIAuthMode")) ?? .apiKey
+    }
+
+    public static var authHeaderModeCandidates: [AuthHeaderMode] {
+        var modes: [AuthHeaderMode] = [authHeaderMode]
+        for mode in AuthHeaderMode.allCases where !modes.contains(mode) {
+            modes.append(mode)
+        }
+        return modes
     }
 
     @discardableResult

@@ -13,14 +13,23 @@ enum CMHTTP {
 
     @discardableResult
     static func applyAuthHeaders(_ request: inout URLRequest) -> Bool {
-        let key = AppConfig.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        applyAuthHeaders(&request, apiKey: AppConfig.apiKey, authHeaderMode: AppConfig.authHeaderMode)
+    }
+
+    @discardableResult
+    static func applyAuthHeaders(
+        _ request: inout URLRequest,
+        apiKey: String,
+        authHeaderMode: AppConfig.AuthHeaderMode
+    ) -> Bool {
+        let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return false }
 
         // Ensure requests don't carry stale auth headers from prior mutations.
         request.setValue(nil, forHTTPHeaderField: "x-api-key")
         request.setValue(nil, forHTTPHeaderField: "Authorization")
 
-        switch AppConfig.authHeaderMode {
+        switch authHeaderMode {
         case .apiKey:
             request.setValue(key, forHTTPHeaderField: "x-api-key")
         case .bearer:

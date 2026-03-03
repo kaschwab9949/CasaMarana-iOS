@@ -42,13 +42,20 @@ struct SignInView: View {
                     .font(.largeTitle)
                     .fontWeight(.bold)
 
-                Text("Sign in to your Casa Marana app login to view your Square loyalty account.")
+                Text("Use your Casa Marana app login to view your loyalty points and rewards.")
                     .font(.body)
                     .foregroundStyle(.secondary)
 
-                Text("Loyalty enrollment happens after an in-store transaction. Then create your app login to view your loyalty account.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("How to sign in:")
+                        .font(.footnote.weight(.semibold))
+                    Text("1. Enter your 10-digit phone number.")
+                    Text("2. Enter your 4-digit app PIN.")
+                    Text("3. Tap Sign In.")
+                    Text("New here? Tap Create app login below first.")
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
 
                 GroupBox {
                     VStack(spacing: 12) {
@@ -57,7 +64,7 @@ struct SignInView: View {
                             .textContentType(.telephoneNumber)
                             .accessibilityIdentifier("rewards.auth.phoneField")
 
-                        SecureField("Password (PIN)", text: $password)
+                        SecureField("4-digit app PIN", text: $password)
                             .keyboardType(.numberPad)
                             .accessibilityIdentifier("rewards.auth.pinField")
                     }
@@ -101,7 +108,7 @@ struct SignInView: View {
                     }
 
                     guard session.hasSetup else {
-                        error = "No app login found for this device. Tap Create App Login to verify your phone and connect loyalty."
+                        error = "No app login found on this device. Tap Create app login below first."
                         return
                     }
 

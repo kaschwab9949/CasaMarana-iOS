@@ -83,7 +83,7 @@ final class MenuData: ObservableObject {
 struct MenuView: View {
     @StateObject private var menuData = MenuData()
     @State private var searchText = ""
-    @State private var selectedSection: MenuSection = .food
+    @State private var selectedSection: MenuSection = .drinks
     @State private var searchAllSections = false
 
     private var sectionScopedItems: [MenuItem] {

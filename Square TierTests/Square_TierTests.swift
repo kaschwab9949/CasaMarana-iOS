@@ -119,9 +119,54 @@ final class Casa_MaranaTests: XCTestCase {
         XCTAssertEqual(MenuCategoryMapping.classify(item), .food)
     }
 
+    func testMenuCategoryMappingUsesSectionHintFirst() {
+        let item = MenuItem(
+            id: "3",
+            name: "House Margarita",
+            description: "",
+            price: "$10.00",
+            category: "Menu",
+            tags: ["Menu"],
+            sectionHint: "drink"
+        )
+        XCTAssertEqual(MenuCategoryMapping.classify(item), .drinks)
+    }
+
+    func testCMHTTPApplyAuthHeadersAPIKeyMode() {
+        var request = URLRequest(url: URL(string: "https://casa-marana-backend.vercel.app")!)
+        let applied = CMHTTP.applyAuthHeaders(&request, apiKey: "abc123", authHeaderMode: .apiKey)
+        XCTAssertTrue(applied)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "x-api-key"), "abc123")
+        XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+    }
+
+    func testCMHTTPApplyAuthHeadersBearerModeStripsPrefix() {
+        var request = URLRequest(url: URL(string: "https://casa-marana-backend.vercel.app")!)
+        let applied = CMHTTP.applyAuthHeaders(&request, apiKey: "Bearer token123", authHeaderMode: .bearer)
+        XCTAssertTrue(applied)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer token123")
+        XCTAssertNil(request.value(forHTTPHeaderField: "x-api-key"))
+    }
+
+    func testEventsExtractorAcceptsSingleQuotedHrefAndSkipsListingLinks() {
+        let html = """
+        <a href='/events/'>Events Home</a>
+        <a href='/events/calendar'>Calendar</a>
+        <a href='/events/2026/3/3/generalwebp?format=ical'>ICS</a>
+        <a href='/events/2026/3/3/generalwebp'>Event Page</a>
+        <a href='https://www.casamarana.com/events/2026/3/3/generalwebp#frag'>Duplicate</a>
+        """
+
+        let urls = EventsFeedModel.debugExtractEventURLs(from: html)
+        XCTAssertEqual(urls.count, 1)
+        XCTAssertEqual(urls.first?.absoluteString, "https://www.casamarana.com/events/2026/3/3/generalwebp")
+    }
+
     func testBackendRouteCandidateOrderIsCanonicalFirst() {
         XCTAssertEqual(BackendRoute.smartCheckInCandidates.first, BackendRoute.smartCheckInCanonical)
         XCTAssertEqual(BackendRoute.accountDeleteCandidates.first, BackendRoute.accountDeleteCanonical)
         XCTAssertEqual(BackendRoute.menuCandidates.first, BackendRoute.menuCanonical)
+        XCTAssertEqual(BackendRoute.phoneStartCandidates.first, BackendRoute.phoneStart)
+        XCTAssertEqual(BackendRoute.phoneVerifyCandidates.first, BackendRoute.phoneVerify)
     }
 }

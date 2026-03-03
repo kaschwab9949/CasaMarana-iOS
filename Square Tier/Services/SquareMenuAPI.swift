@@ -1,8 +1,29 @@
 import Foundation
 
 final class SquareMenuAPI {
-    private func applyAuthHeaders(_ request: inout URLRequest) throws {
-        guard CMHTTP.applyAuthHeaders(&request) else {
+    private struct AuthAttempt: Hashable {
+        let apiKey: String
+        let mode: AppConfig.AuthHeaderMode
+    }
+
+    private func authAttempts() -> [AuthAttempt] {
+        var seen = Set<AuthAttempt>()
+        var attempts: [AuthAttempt] = []
+
+        for key in AppConfig.apiKeyCandidates {
+            for mode in AppConfig.authHeaderModeCandidates {
+                let candidate = AuthAttempt(apiKey: key, mode: mode)
+                if seen.insert(candidate).inserted {
+                    attempts.append(candidate)
+                }
+            }
+        }
+
+        return attempts
+    }
+
+    private func applyAuthHeaders(_ request: inout URLRequest, auth: AuthAttempt) throws {
+        guard CMHTTP.applyAuthHeaders(&request, apiKey: auth.apiKey, authHeaderMode: auth.mode) else {
             throw APIError.message("Menu service is not configured. Add an API key in Settings.")
         }
     }
@@ -52,40 +73,53 @@ final class SquareMenuAPI {
     }
 
     func fetchMenu() async throws -> [MenuItem] {
+        let authAttempts = authAttempts()
+        guard !authAttempts.isEmpty else {
+            throw APIError.message("Menu service is not configured. Add an API key in Settings.")
+        }
+
         var lastError: APIError?
         for pathComponents in BackendRoute.menuCandidates {
             let endpoint = BackendRoute.url(for: pathComponents)
 
-            var request = URLRequest(url: endpoint)
-            request.httpMethod = "GET"
-            try applyAuthHeaders(&request)
+            for authAttempt in authAttempts {
+                var request = URLRequest(url: endpoint)
+                request.httpMethod = "GET"
+                request.timeoutInterval = 40
+                try applyAuthHeaders(&request, auth: authAttempt)
 
-            let (data, response) = try await CMHTTP.session.data(for: request)
-            guard let http = response as? HTTPURLResponse else {
-                throw APIError.message("No HTTP response")
+                let (data, response) = try await CMHTTP.session.data(for: request)
+                guard let http = response as? HTTPURLResponse else {
+                    throw APIError.message("No HTTP response")
+                }
+
+                if http.statusCode == 401 || http.statusCode == 403 {
+                    lastError = friendlyAPIError(statusCode: http.statusCode, data: data)
+                    continue
+                }
+
+                if http.statusCode == 404 {
+                    lastError = friendlyAPIError(statusCode: http.statusCode, data: data)
+                    break
+                }
+
+                guard (200..<300).contains(http.statusCode) else {
+                    throw friendlyAPIError(statusCode: http.statusCode, data: data)
+                }
+
+                let contentType = (http.value(forHTTPHeaderField: "Content-Type") ?? "").lowercased()
+                if contentType.contains("text/html") {
+                    lastError = .message("Menu service returned an unexpected response. Verify backend URL and API route.")
+                    continue
+                }
+
+                let decoded = parseMenuItems(from: data)
+                if !decoded.isEmpty {
+                    return decoded
+                }
+
+                lastError = .decoding
             }
-
-            if http.statusCode == 404 {
-                lastError = friendlyAPIError(statusCode: http.statusCode, data: data)
-                continue
-            }
-
-            guard (200..<300).contains(http.statusCode) else {
-                throw friendlyAPIError(statusCode: http.statusCode, data: data)
-            }
-
-            let contentType = (http.value(forHTTPHeaderField: "Content-Type") ?? "").lowercased()
-            if contentType.contains("text/html") {
-                lastError = .message("Menu service returned an unexpected response. Verify backend URL and API route.")
-                continue
-            }
-
-            let decoded = parseMenuItems(from: data)
-            if !decoded.isEmpty {
-                return decoded
-            }
-
-            lastError = .decoding
         }
 
         if let lastError {

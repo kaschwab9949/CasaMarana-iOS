@@ -31,6 +31,7 @@ struct SnakeGameView: View {
     @State private var isSubmittingLeaderboardScore = false
     @State private var lastSubmittedHighScore = 0
     @State private var isLeaderboardExpanded = false
+    @GestureState private var isInteractingWithBoard = false
 
     private let leaderboardAPI = SnakeLeaderboardAPI()
 
@@ -93,6 +94,16 @@ struct SnakeGameView: View {
         let safeCols = max(cols, 1)
         let cellSize = min(48, max(1, boardSide / CGFloat(safeCols)))
         return (boardSide, cellSize)
+    }
+
+    private var boardSwipeGesture: some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .updating($isInteractingWithBoard) { _, state, _ in
+                state = true
+            }
+            .onEnded { value in
+                handleSwipe(value.translation)
+            }
     }
 
     var body: some View {
@@ -208,12 +219,8 @@ struct SnakeGameView: View {
                     }
                     .frame(width: boardSide, height: boardSide)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .gesture(
-                        DragGesture(minimumDistance: minimumSwipeDistance)
-                            .onEnded { value in
-                                handleSwipe(value.translation)
-                            }
-                    )
+                    .contentShape(Rectangle())
+                    .highPriorityGesture(boardSwipeGesture)
                 }
                 .frame(height: verticalSizeClass == .compact ? 320 : 470)
 
@@ -343,6 +350,7 @@ struct SnakeGameView: View {
             }
             .frame(maxWidth: .infinity, alignment: .top)
         }
+        .scrollDisabled(isInteractingWithBoard)
         .onAppear {
             if snake.isEmpty {
                 resetGame()
@@ -401,6 +409,7 @@ struct SnakeGameView: View {
 
         let xDiff = translation.width
         let yDiff = translation.height
+        guard max(abs(xDiff), abs(yDiff)) >= minimumSwipeDistance else { return }
 
         if abs(xDiff) > abs(yDiff) {
             requestDirection(xDiff > 0 ? .right : .left)

@@ -31,6 +31,47 @@ struct CreateAccountView: View {
         return t.count == 4 && t.allSatisfy { $0.isNumber }
     }
 
+    private func maskedPhone(_ e164: String) -> String {
+        let digits = e164.filter(\.isNumber)
+        let suffix = String(digits.suffix(4))
+        return suffix.isEmpty ? "your phone" : "••• ••• \(suffix)"
+    }
+
+    @MainActor
+    private func sendVerificationCode() async {
+        error = nil
+        codeInfo = nil
+
+        let raw = profile.phoneE164
+        guard let normalized = normalizePhoneE164(raw) else {
+            error = "Please enter a valid 10-digit US phone number."
+            return
+        }
+        profile.phoneE164 = normalized
+
+        isSendingCode = true
+        defer { isSendingCode = false }
+
+        do {
+            let resp = try await phoneVerifyAPI.start(phoneE164: normalized)
+            verificationRequestId = resp.requestId
+            verificationCodeSent = true
+            verificationCode = ""
+            profile.isPhoneVerified = false
+            profile.phoneVerificationToken = nil
+            codeInfo = "Passcode sent to \(maskedPhone(normalized)). Enter the 6-digit code."
+        } catch {
+            verificationRequestId = nil
+            verificationCodeSent = false
+            codeInfo = nil
+            self.error = UserFacingError.message(
+                for: error,
+                context: .auth,
+                fallback: "Failed to send passcode. Please check the number and try again."
+            )
+        }
+    }
+
     private var canFinalizeAccount: Bool {
         let name = profile.fullName.trimmingCharacters(in: .whitespacesAndNewlines)
         let phone = profile.phoneE164.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -156,6 +197,10 @@ struct CreateAccountView: View {
 
                 GroupBox("Verify Phone Number") {
                     VStack(alignment: .leading, spacing: 10) {
+                        Text("Tap Send Passcode, then enter the 6-digit code from text message.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+
                         if !verificationCodeSent {
                             TextField("US Phone Number (e.g. 5205551234)", text: $profile.phoneE164)
                                 .keyboardType(.phonePad)
@@ -163,40 +208,11 @@ struct CreateAccountView: View {
                                 .accessibilityIdentifier("auth.create.phoneField")
 
                             Button {
-                                Task {
-                                    error = nil
-                                    codeInfo = nil
-
-                                    let raw = profile.phoneE164
-                                    guard let normalized = normalizePhoneE164(raw) else {
-                                        error = "Please enter a valid 10-digit US phone number."
-                                        return
-                                    }
-                                    profile.phoneE164 = normalized
-
-                                    isSendingCode = true
-                                    defer { isSendingCode = false }
-
-                                    do {
-                                        let resp = try await phoneVerifyAPI.start(phoneE164: normalized)
-                                        verificationRequestId = resp.requestId
-                                        verificationCodeSent = true
-                                        codeInfo = "We’ve sent a 6-digit verification code to your phone."
-                                    } catch {
-                                        verificationRequestId = nil
-                                        verificationCodeSent = false
-                                        codeInfo = nil
-                                        self.error = UserFacingError.message(
-                                            for: error,
-                                            context: .auth,
-                                            fallback: "Failed to send verification code."
-                                        )
-                                    }
-                                }
+                                Task { await sendVerificationCode() }
                             } label: {
                                 HStack {
                                     if isSendingCode { ProgressView() }
-                                    Text(isSendingCode ? "Sending…" : "Send Code")
+                                    Text(isSendingCode ? "Sending…" : "Send Passcode")
                                         .frame(maxWidth: .infinity)
                                 }
                             }
@@ -224,19 +240,27 @@ struct CreateAccountView: View {
                                 .background(.thinMaterial)
                                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
+                                if !profile.isPhoneVerified {
+                                    TextField("6-digit code", text: $verificationCode)
+                                        .keyboardType(.numberPad)
+                                        .textContentType(.oneTimeCode)
+                                        .textFieldStyle(.roundedBorder)
+                                        .accessibilityIdentifier("auth.create.verificationCodeField")
+                                }
+
                                 HStack {
                                     Button {
                                         Task {
                                             error = nil
 
                                             guard let requestId = verificationRequestId, !requestId.isEmpty else {
-                                                error = "Missing request ID."
+                                                await sendVerificationCode()
                                                 return
                                             }
 
                                             let trimmed = verificationCode.trimmingCharacters(in: .whitespacesAndNewlines)
                                             guard !trimmed.isEmpty else {
-                                                error = "Please enter the code."
+                                                error = "Please enter the 6-digit passcode."
                                                 return
                                             }
 
@@ -248,10 +272,10 @@ struct CreateAccountView: View {
                                                 if resp.verified {
                                                     profile.isPhoneVerified = true
                                                     profile.phoneVerificationToken = resp.token
-                                                    codeInfo = "Phone verified successfully!"
+                                                    codeInfo = "Phone verified successfully."
                                                     error = nil
                                                 } else {
-                                                    error = "Verification failed or incorrect code."
+                                                    error = "Incorrect passcode. Please try again or resend."
                                                 }
                                             } catch let err {
                                                 error = UserFacingError.message(
@@ -264,20 +288,37 @@ struct CreateAccountView: View {
                                     } label: {
                                         HStack {
                                             if isVerifyingCode { ProgressView() }
-                                            Text(isVerifyingCode ? "Verifying…" : "Verify")
+                                            Text(isVerifyingCode ? "Verifying…" : "Verify Passcode")
                                         }
                                     }
                                     .buttonStyle(.bordered)
-                                    .disabled(isSendingCode || isVerifyingCode || isCreatingAccount)
+                                    .disabled(isSendingCode || isVerifyingCode || isCreatingAccount || profile.isPhoneVerified)
                                     .accessibilityIdentifier("auth.create.verifyCodeButton")
 
-                                    if !profile.isPhoneVerified {
-                                        TextField("6-digit code", text: $verificationCode)
-                                            .keyboardType(.numberPad)
-                                            .textContentType(.oneTimeCode)
-                                            .textFieldStyle(.roundedBorder)
-                                            .accessibilityIdentifier("auth.create.verificationCodeField")
+                                    Button {
+                                        Task { await sendVerificationCode() }
+                                    } label: {
+                                        HStack {
+                                            if isSendingCode { ProgressView() }
+                                            Text(isSendingCode ? "Sending…" : "Resend Passcode")
+                                        }
                                     }
+                                    .buttonStyle(.bordered)
+                                    .disabled(isSendingCode || isVerifyingCode || isCreatingAccount || profile.isPhoneVerified)
+                                    .accessibilityIdentifier("auth.create.resendCodeButton")
+
+                                    Button("Edit Number") {
+                                        verificationCodeSent = false
+                                        verificationRequestId = nil
+                                        verificationCode = ""
+                                        profile.isPhoneVerified = false
+                                        profile.phoneVerificationToken = nil
+                                        codeInfo = nil
+                                        error = nil
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(isSendingCode || isVerifyingCode || isCreatingAccount || profile.isPhoneVerified)
+                                    .accessibilityIdentifier("auth.create.editPhoneButton")
                                 }
                             }
                         }

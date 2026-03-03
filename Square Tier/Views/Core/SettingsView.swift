@@ -10,6 +10,10 @@ private struct EndpointSelfCheckResult: Identifiable {
     let ok: Bool
     let detail: String
 }
+
+private enum InternalDebugPanel {
+    static let launchArgument = "-cm-show-api-debug"
+}
 #endif
 
 struct SettingsView: View {
@@ -74,6 +78,10 @@ struct SettingsView: View {
     private var activeAPIKeyStatusText: String {
         let trimmed = AppConfig.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "Not configured" : "Configured"
+    }
+
+    private var shouldShowInternalAPIDebugSection: Bool {
+        ProcessInfo.processInfo.arguments.contains(InternalDebugPanel.launchArgument)
     }
 
     private func loadRuntimeAPIConfigForm() {
@@ -290,96 +298,99 @@ struct SettingsView: View {
             }
 
 #if DEBUG
-            Section("API Configuration (Debug)") {
-                Text("Active backend: \(AppConfig.backendBaseURL.absoluteString)")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
-                Text("Active auth mode: \(AppConfig.authHeaderMode == .bearer ? "Bearer token" : "x-api-key")")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
-                Text("Active key status: \(activeAPIKeyStatusText)")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
-                if AppConfig.hasRuntimeOverrides {
-                    Text("Runtime overrides are currently enabled for this device.")
+            // Extra internal diagnostics are hidden unless explicitly enabled via launch argument.
+            if shouldShowInternalAPIDebugSection {
+                Section("API Configuration (Debug)") {
+                    Text("Active backend: \(AppConfig.backendBaseURL.absoluteString)")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                }
 
-                TextField("Runtime backend URL", text: $runtimeBackendURL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
-                    .keyboardType(.URL)
-                    .accessibilityIdentifier("settings.api.runtimeBackendField")
-
-                SecureField("Runtime API key/token", text: $runtimeAPIKey)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
-                    .accessibilityIdentifier("settings.api.runtimeKeyField")
-
-                Picker("Header Mode", selection: $runtimeAuthMode) {
-                    Text("x-api-key").tag(AppConfig.AuthHeaderMode.apiKey)
-                    Text("Bearer").tag(AppConfig.AuthHeaderMode.bearer)
-                }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("settings.api.runtimeModePicker")
-
-                Button("Save Runtime API Settings") {
-                    saveRuntimeAPIConfig()
-                }
-                .accessibilityIdentifier("settings.api.saveButton")
-
-                Button("Clear Runtime Overrides", role: .destructive) {
-                    clearRuntimeAPIConfig()
-                }
-                .accessibilityIdentifier("settings.api.clearButton")
-
-                if let runtimeConfigError {
-                    Text(runtimeConfigError)
+                    Text("Active auth mode: \(AppConfig.authHeaderMode == .bearer ? "Bearer token" : "x-api-key")")
                         .font(.footnote)
-                        .foregroundStyle(.red)
-                        .accessibilityIdentifier("settings.api.errorText")
-                }
+                        .foregroundStyle(.secondary)
 
-                if let runtimeConfigNotice {
-                    Text(runtimeConfigNotice)
+                    Text("Active key status: \(activeAPIKeyStatusText)")
                         .font(.footnote)
-                        .foregroundStyle(.green)
-                        .accessibilityIdentifier("settings.api.noticeText")
-                }
+                        .foregroundStyle(.secondary)
 
-                Divider()
-
-                Button {
-                    runEndpointSelfCheck()
-                } label: {
-                    if isRunningSelfCheck {
-                        Label("Running endpoint self-check…", systemImage: "hourglass")
-                    } else {
-                        Label("Run Endpoint Self-Check", systemImage: "checkmark.shield")
+                    if AppConfig.hasRuntimeOverrides {
+                        Text("Runtime overrides are currently enabled for this device.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
-                }
-                .disabled(isRunningSelfCheck)
-                .accessibilityIdentifier("settings.api.selfCheckButton")
 
-                if !endpointSelfCheckResults.isEmpty {
-                    ForEach(endpointSelfCheckResults) { result in
-                        HStack(alignment: .top, spacing: 8) {
-                            Image(systemName: result.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                .foregroundStyle(result.ok ? .green : .red)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(result.name)
-                                    .font(.subheadline.weight(.semibold))
-                                Text(result.detail)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
+                    TextField("Runtime backend URL", text: $runtimeBackendURL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .keyboardType(.URL)
+                        .accessibilityIdentifier("settings.api.runtimeBackendField")
+
+                    SecureField("Runtime API key/token", text: $runtimeAPIKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .accessibilityIdentifier("settings.api.runtimeKeyField")
+
+                    Picker("Header Mode", selection: $runtimeAuthMode) {
+                        Text("x-api-key").tag(AppConfig.AuthHeaderMode.apiKey)
+                        Text("Bearer").tag(AppConfig.AuthHeaderMode.bearer)
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("settings.api.runtimeModePicker")
+
+                    Button("Save Runtime API Settings") {
+                        saveRuntimeAPIConfig()
+                    }
+                    .accessibilityIdentifier("settings.api.saveButton")
+
+                    Button("Clear Runtime Overrides", role: .destructive) {
+                        clearRuntimeAPIConfig()
+                    }
+                    .accessibilityIdentifier("settings.api.clearButton")
+
+                    if let runtimeConfigError {
+                        Text(runtimeConfigError)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                            .accessibilityIdentifier("settings.api.errorText")
+                    }
+
+                    if let runtimeConfigNotice {
+                        Text(runtimeConfigNotice)
+                            .font(.footnote)
+                            .foregroundStyle(.green)
+                            .accessibilityIdentifier("settings.api.noticeText")
+                    }
+
+                    Divider()
+
+                    Button {
+                        runEndpointSelfCheck()
+                    } label: {
+                        if isRunningSelfCheck {
+                            Label("Running endpoint self-check…", systemImage: "hourglass")
+                        } else {
+                            Label("Run Endpoint Self-Check", systemImage: "checkmark.shield")
                         }
-                        .accessibilityIdentifier("settings.api.selfCheck.\(result.name)")
+                    }
+                    .disabled(isRunningSelfCheck)
+                    .accessibilityIdentifier("settings.api.selfCheckButton")
+
+                    if !endpointSelfCheckResults.isEmpty {
+                        ForEach(endpointSelfCheckResults) { result in
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: result.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                    .foregroundStyle(result.ok ? .green : .red)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(result.name)
+                                        .font(.subheadline.weight(.semibold))
+                                    Text(result.detail)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                            .accessibilityIdentifier("settings.api.selfCheck.\(result.name)")
+                        }
                     }
                 }
             }
@@ -481,7 +492,9 @@ struct SettingsView: View {
         }
         .onAppear {
 #if DEBUG
-            loadRuntimeAPIConfigForm()
+            if shouldShowInternalAPIDebugSection {
+                loadRuntimeAPIConfigForm()
+            }
 #endif
         }
     }
