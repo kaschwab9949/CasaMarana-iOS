@@ -43,10 +43,10 @@ struct RewardsPreviewView: View {
     var body: some View {
         List {
             Section {
-                Text("Loyalty Enrollment Required")
+                Text("Set Up Rewards")
                     .font(.headline)
                 
-                Text("Use your verified phone to connect your loyalty account, then sign in to view points, tier status, and available rewards in the app.")
+                Text("Sign in with your app login to load points and tier status. If this phone is not enrolled in Square Loyalty yet, complete enrollment after an in-store transaction, then refresh.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

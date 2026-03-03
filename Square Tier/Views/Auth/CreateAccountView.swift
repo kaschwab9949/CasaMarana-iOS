@@ -67,7 +67,7 @@ struct CreateAccountView: View {
             self.error = UserFacingError.message(
                 for: error,
                 context: .auth,
-                fallback: "Failed to send passcode. Please check the number and try again."
+                fallback: "We could not send a passcode. Check the phone number and try again."
             )
         }
     }
@@ -165,7 +165,11 @@ struct CreateAccountView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.bottom, 8)
 
-                Text("Create your app login to access your loyalty account. Your phone must already be enrolled in Square Loyalty.")
+                Text("Create your app login with your phone number and a 4-digit PIN.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                Text("After setup, sign in to view your points. If this phone is not enrolled in Square Loyalty yet, complete enrollment after an in-store transaction and then sign in.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
@@ -197,7 +201,7 @@ struct CreateAccountView: View {
 
                 GroupBox("Verify Phone Number") {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Tap Send Passcode, then enter the 6-digit code from text message.")
+                        Text("Step 1: Enter your phone number. Step 2: Tap Send Passcode. Step 3: Enter the 6-digit code from text message.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
 

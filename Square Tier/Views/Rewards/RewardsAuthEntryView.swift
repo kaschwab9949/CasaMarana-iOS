@@ -42,29 +42,29 @@ struct SignInView: View {
                     .font(.largeTitle)
                     .fontWeight(.bold)
 
-                Text("Use your Casa Marana app login to view your loyalty points and rewards.")
+                Text("Sign in with the phone number and 4-digit PIN you created in this app.")
                     .font(.body)
                     .foregroundStyle(.secondary)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("How to sign in:")
+                    Text("Quick steps")
                         .font(.footnote.weight(.semibold))
-                    Text("1. Enter your 10-digit phone number.")
+                    Text("1. Enter the same 10-digit phone number used for your app login.")
                     Text("2. Enter your 4-digit app PIN.")
-                    Text("3. Tap Sign In.")
-                    Text("New here? Tap Create app login below first.")
+                    Text("3. Tap Sign In to load your points and rewards.")
+                    Text("First time here? Tap Create App Login.")
                 }
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
                 GroupBox {
                     VStack(spacing: 12) {
-                        TextField("Phone Number", text: $usernamePhone)
+                        TextField("Phone Number (10 digits)", text: $usernamePhone)
                             .keyboardType(.numberPad)
                             .textContentType(.telephoneNumber)
                             .accessibilityIdentifier("rewards.auth.phoneField")
 
-                        SecureField("4-digit app PIN", text: $password)
+                        SecureField("App PIN (4 digits)", text: $password)
                             .keyboardType(.numberPad)
                             .accessibilityIdentifier("rewards.auth.pinField")
                     }
@@ -84,11 +84,11 @@ struct SignInView: View {
                     let pw = password.trimmingCharacters(in: .whitespacesAndNewlines)
 
                     guard input10.count == 10 else {
-                        error = "Please enter a valid 10-digit phone number."
+                        error = "Enter a valid 10-digit US phone number (example: 5205551234)."
                         return
                     }
                     guard pw.count == 4 else {
-                        error = "PIN must be 4 digits. If you don't have one, create an account."
+                        error = "Enter your 4-digit app PIN. If you are new, tap Create App Login."
                         return
                     }
 
@@ -108,25 +108,25 @@ struct SignInView: View {
                     }
 
                     guard session.hasSetup else {
-                        error = "No app login found on this device. Tap Create app login below first."
+                        error = "No app login is saved on this device yet. Tap Create App Login."
                         return
                     }
 
                     guard session.unlock(pin: pw) else {
-                        error = "Invalid phone number or PIN."
+                        error = "Phone number or PIN is incorrect."
                         return
                     }
 
                     let storedPhone = normalizePhoneE164(session.profile.phoneE164) ?? session.profile.phoneE164
                     guard !storedPhone.isEmpty else {
                         session.lock()
-                        error = "Profile data is incomplete. Please create your app login again."
+                        error = "Your saved login is incomplete. Tap Create App Login to set it up again."
                         return
                     }
 
                     guard storedPhone == normalizedInput else {
                         session.lock()
-                        error = "This phone number does not match the app login on this device."
+                        error = "Use the same phone number you used when creating this app login."
                         return
                     }
 
@@ -143,14 +143,14 @@ struct SignInView: View {
                 NavigationLink {
                     CreateAccountView()
                 } label: {
-                    Text("Create app login")
+                    Text("Create App Login")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 .padding(.top, 8)
                 .accessibilityIdentifier("rewards.auth.createAccountLink")
 
-                Text("App login is separate from Square POS. Use a verified phone number to connect and view points.")
+                Text("App login is separate from in-store checkout. After sign-in, we use your verified phone number to pull Square loyalty points.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
