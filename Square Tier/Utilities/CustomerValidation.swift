@@ -21,28 +21,47 @@ func normalizeCustomerBirthday(_ raw: String) -> String? {
         return ""
     }
 
-    let parts = trimmed.split(separator: "-", omittingEmptySubsequences: false)
+    let cleaned = trimmed
+        .replacingOccurrences(of: "-", with: "/")
+        .replacingOccurrences(of: ".", with: "/")
 
-    if parts.count == 2,
-       let month = Int(parts[0]),
-       let day = Int(parts[1]),
-       isValidMonthDay(month: month, day: day, year: 2000) {
-        return String(format: "%02d-%02d", month, day)
+    let parts = cleaned.split(separator: "/", omittingEmptySubsequences: false)
+    guard parts.count == 3 else { return nil }
+    guard
+        let first = Int(parts[0]),
+        let second = Int(parts[1]),
+        let third = Int(parts[2])
+    else {
+        return nil
     }
 
-    if parts.count == 3,
-       parts[0].count == 4,
-       let year = Int(parts[0]),
-       let month = Int(parts[1]),
-       let day = Int(parts[2]),
-       (0...9999).contains(year) {
-        let validationYear = year == 0 ? 2000 : year
-        if isValidMonthDay(month: month, day: day, year: validationYear) {
-            return String(format: "%04d-%02d-%02d", year, month, day)
+    let month: Int
+    let day: Int
+    let year: Int
+
+    if parts[0].count == 4 {
+        // Backward compatibility for legacy YYYY-MM-DD values.
+        year = first
+        month = second
+        day = third
+    } else {
+        month = first
+        day = second
+
+        if parts[2].count == 4 {
+            year = third
+        } else if parts[2].count <= 2, (0...99).contains(third) {
+            year = fullYearFromTwoDigit(third)
+        } else {
+            return nil
         }
     }
 
-    return nil
+    guard (1...9999).contains(year) else { return nil }
+    let validationYear = year == 0 ? 2000 : year
+    guard isValidMonthDay(month: month, day: day, year: validationYear) else { return nil }
+
+    return String(format: "%02d/%02d/%02d", month, day, year % 100)
 }
 
 private func isValidMonthDay(month: Int, day: Int, year: Int) -> Bool {
@@ -53,4 +72,17 @@ private func isValidMonthDay(month: Int, day: Int, year: Int) -> Bool {
     components.month = month
     components.day = day
     return components.date != nil
+}
+
+private func fullYearFromTwoDigit(_ year: Int, referenceDate: Date = Date()) -> Int {
+    let clamped = max(0, min(99, year))
+    let calendar = Calendar(identifier: .gregorian)
+    let currentYear = calendar.component(.year, from: referenceDate)
+    let currentCentury = (currentYear / 100) * 100
+    let currentTwoDigit = currentYear % 100
+
+    if clamped <= currentTwoDigit {
+        return currentCentury + clamped
+    }
+    return (currentCentury - 100) + clamped
 }

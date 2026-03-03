@@ -27,6 +27,20 @@ final class Casa_MaranaTests: XCTestCase {
         XCTAssertEqual(normalizePhoneE164("+1 (520) 555-1234"), "+15205551234")
     }
 
+    func testNormalizeCustomerBirthday_acceptsMMDDYYFormat() {
+        XCTAssertEqual(normalizeCustomerBirthday("9/7/21"), "09/07/21")
+        XCTAssertEqual(normalizeCustomerBirthday("09/07/21"), "09/07/21")
+    }
+
+    func testNormalizeCustomerBirthday_convertsLegacyYYYYMMDD() {
+        XCTAssertEqual(normalizeCustomerBirthday("1990-01-15"), "01/15/90")
+    }
+
+    func testNormalizeCustomerBirthday_rejectsMissingOrInvalidYear() {
+        XCTAssertNil(normalizeCustomerBirthday("09/07"))
+        XCTAssertNil(normalizeCustomerBirthday("13/07/21"))
+    }
+
     func testUserProfileRoundTripCodable() throws {
         let original = UserProfile(
             fullName: "Test Member",

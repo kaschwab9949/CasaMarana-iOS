@@ -146,7 +146,7 @@ struct CreateAccountView: View {
         }
 
         guard let normalizedBirthday = normalizeCustomerBirthday(profile.birthday) else {
-            error = "Birthday is required. Use YYYY-MM-DD or MM-DD format."
+            error = "Birthday is required. Use MM/DD/YY format."
             return
         }
 
@@ -247,7 +247,9 @@ struct CreateAccountView: View {
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled(true)
                             .accessibilityIdentifier("auth.create.emailField")
-                        TextField("Birthday (required: YYYY-MM-DD or MM-DD)", text: $profile.birthday)
+                        TextField("Birthday (required: MM/DD/YY)", text: $profile.birthday)
+                            .keyboardType(.numbersAndPunctuation)
+                            .textContentType(.birthdate)
                             .accessibilityIdentifier("auth.create.birthdayField")
                     }
                 }

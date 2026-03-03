@@ -27,7 +27,9 @@ struct ProfileView: View {
                     .keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled(true)
-                TextField("Birthday", text: $draft.birthday)
+                TextField("Birthday (MM/DD/YY)", text: $draft.birthday)
+                    .keyboardType(.numbersAndPunctuation)
+                    .textContentType(.birthdate)
             }
 
             Section {
@@ -60,7 +62,7 @@ struct ProfileView: View {
                     }
 
                     guard let normalizedBirthday = normalizeCustomerBirthday(draft.birthday) else {
-                        formError = "Birthday must use YYYY-MM-DD or MM-DD format."
+                        formError = "Birthday must use MM/DD/YY format."
                         return
                     }
 
@@ -98,6 +100,9 @@ struct ProfileView: View {
         }
         .onAppear {
             draft = session.profile
+            if let normalizedBirthday = normalizeCustomerBirthday(draft.birthday) {
+                draft.birthday = normalizedBirthday
+            }
         }
     }
 }
