@@ -31,7 +31,6 @@ struct SnakeGameView: View {
     @State private var isSubmittingLeaderboardScore = false
     @State private var lastSubmittedHighScore = 0
     @State private var isLeaderboardExpanded = false
-    @State private var leaderboardTotalCount: Int? = nil
     @GestureState private var isInteractingWithBoard = false
 
     private let leaderboardAPI = SnakeLeaderboardAPI()
@@ -77,6 +76,20 @@ struct SnakeGameView: View {
         let digits = phone.filter(\.isNumber)
         let suffix = String(digits.suffix(4))
         return suffix.isEmpty ? "Member" : "Member \(suffix)"
+    }
+
+    private var otherPlayerEntries: [SnakeLeaderboardEntry] {
+        leaderboardEntries.filter { !isLocalPlayerEntry($0) }
+    }
+
+    private var localPlayerBestEntry: SnakeLeaderboardEntry? {
+        let localEntries = leaderboardEntries.filter { isLocalPlayerEntry($0) }
+        return localEntries.min { lhs, rhs in
+            if lhs.rank == rhs.rank {
+                return lhs.score > rhs.score
+            }
+            return lhs.rank < rhs.rank
+        }
     }
 
     static func resolvedBoardMetrics(containerSize: CGSize, cols: Int) -> (boardSide: CGFloat, cellSize: CGFloat) {
@@ -289,14 +302,18 @@ struct SnakeGameView: View {
                                 .accessibilityIdentifier("snake.leaderboard.errorText")
                         }
 
-                        if leaderboardEntries.isEmpty {
+                        if otherPlayerEntries.isEmpty {
                             Text("No leaderboard scores yet.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         } else {
+                            Text("Top Other Players")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+
                             ScrollView {
                                 LazyVStack(spacing: 8) {
-                                    ForEach(leaderboardEntries) { entry in
+                                    ForEach(otherPlayerEntries) { entry in
                                         HStack(spacing: 10) {
                                             Text("#\(entry.rank)")
                                                 .font(.subheadline.monospacedDigit())
@@ -308,7 +325,6 @@ struct SnakeGameView: View {
                                                 .font(.subheadline.monospacedDigit())
                                                 .bold()
                                         }
-                                        .foregroundStyle(isLocalPlayerEntry(entry) ? .mint : .primary)
                                     }
                                 }
                             }
@@ -319,10 +335,10 @@ struct SnakeGameView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
-                        if let total = leaderboardTotalCount, total > 0 {
-                            Text("\(total) rewards members ranked.")
+                        if let localBest = localPlayerBestEntry {
+                            Text("Your best: #\(localBest.rank) • \(localBest.score) points")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.mint)
                         }
 
                         if verifiedPhoneE164 == nil {
@@ -556,7 +572,6 @@ struct SnakeGameView: View {
                 await MainActor.run {
                     self.lastSubmittedHighScore = max(self.lastSubmittedHighScore, saved)
                     self.leaderboardEntries = snapshot.entries
-                    self.leaderboardTotalCount = snapshot.count ?? snapshot.entries.count
                     self.leaderboardError = nil
                     self.isSubmittingLeaderboardScore = false
                 }
@@ -579,7 +594,6 @@ struct SnakeGameView: View {
             let snapshot = try await leaderboardAPI.fetchLeaderboardSnapshot(limit: 100, phoneE164: nil)
             await MainActor.run {
                 leaderboardEntries = snapshot.entries
-                leaderboardTotalCount = snapshot.count ?? snapshot.entries.count
                 isLoadingLeaderboard = false
             }
         } catch {
