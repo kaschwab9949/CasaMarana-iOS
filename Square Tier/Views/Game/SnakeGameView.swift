@@ -31,6 +31,7 @@ struct SnakeGameView: View {
     @State private var isSubmittingLeaderboardScore = false
     @State private var lastSubmittedHighScore = 0
     @State private var isLeaderboardExpanded = false
+    @State private var leaderboardTotalCount: Int? = nil
     @GestureState private var isInteractingWithBoard = false
 
     private let leaderboardAPI = SnakeLeaderboardAPI()
@@ -318,6 +319,12 @@ struct SnakeGameView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
+                        if let total = leaderboardTotalCount, total > 0 {
+                            Text("\(total) rewards members ranked.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
                         if verifiedPhoneE164 == nil {
                             Text("Sign in with a verified phone to publish your high score.")
                                 .font(.caption)
@@ -544,11 +551,12 @@ struct SnakeGameView: View {
                     displayName: displayName,
                     score: best
                 )
-                let entries = try await leaderboardAPI.fetchLeaderboard(limit: 100, phoneE164: nil)
+                let snapshot = try await leaderboardAPI.fetchLeaderboardSnapshot(limit: 100, phoneE164: nil)
 
                 await MainActor.run {
                     self.lastSubmittedHighScore = max(self.lastSubmittedHighScore, saved)
-                    self.leaderboardEntries = entries
+                    self.leaderboardEntries = snapshot.entries
+                    self.leaderboardTotalCount = snapshot.count ?? snapshot.entries.count
                     self.leaderboardError = nil
                     self.isSubmittingLeaderboardScore = false
                 }
@@ -568,9 +576,10 @@ struct SnakeGameView: View {
         }
 
         do {
-            let entries = try await leaderboardAPI.fetchLeaderboard(limit: 100, phoneE164: nil)
+            let snapshot = try await leaderboardAPI.fetchLeaderboardSnapshot(limit: 100, phoneE164: nil)
             await MainActor.run {
-                leaderboardEntries = entries
+                leaderboardEntries = snapshot.entries
+                leaderboardTotalCount = snapshot.count ?? snapshot.entries.count
                 isLoadingLeaderboard = false
             }
         } catch {

@@ -45,6 +45,12 @@ struct SnakeLeaderboardEntry: Decodable, Identifiable {
 
 private struct SnakeLeaderboardResponse: Decodable {
     let entries: [SnakeLeaderboardEntry]
+    let count: Int?
+}
+
+struct SnakeLeaderboardSnapshot {
+    let entries: [SnakeLeaderboardEntry]
+    let count: Int?
 }
 
 private struct SnakeScoreSubmitRequest: Encodable {
@@ -207,12 +213,12 @@ final class SnakeLeaderboardAPI {
         return .badStatus(statusCode)
     }
 
-    private func decodeLeaderboardEntries(from data: Data) -> [SnakeLeaderboardEntry]? {
+    private func decodeLeaderboardSnapshot(from data: Data) -> SnakeLeaderboardSnapshot? {
         if let decoded = try? JSONDecoder().decode(SnakeLeaderboardResponse.self, from: data) {
-            return decoded.entries
+            return SnakeLeaderboardSnapshot(entries: decoded.entries, count: decoded.count)
         }
         if let decodedArray = try? JSONDecoder().decode([SnakeLeaderboardEntry].self, from: data) {
-            return decodedArray
+            return SnakeLeaderboardSnapshot(entries: decodedArray, count: decodedArray.count)
         }
 
         guard let json = try? JSONSerialization.jsonObject(with: data, options: []) else {
@@ -228,11 +234,18 @@ final class SnakeLeaderboardAPI {
             ]
             for candidate in candidateArrays {
                 if let array = candidate as? [[String: Any]] {
-                    return array.compactMap(parseLeaderboardEntry(from:))
+                    let entries = array.compactMap(parseLeaderboardEntry(from:))
+                    let count =
+                        parseInt(object["count"])
+                        ?? parseInt(object["total"])
+                        ?? parseInt(object["totalCount"])
+                        ?? entries.count
+                    return SnakeLeaderboardSnapshot(entries: entries, count: count)
                 }
             }
         } else if let array = json as? [[String: Any]] {
-            return array.compactMap(parseLeaderboardEntry(from:))
+            let entries = array.compactMap(parseLeaderboardEntry(from:))
+            return SnakeLeaderboardSnapshot(entries: entries, count: entries.count)
         }
 
         return nil
@@ -320,7 +333,7 @@ final class SnakeLeaderboardAPI {
         return nil
     }
 
-    func fetchLeaderboard(limit: Int = 100, phoneE164: String?) async throws -> [SnakeLeaderboardEntry] {
+    func fetchLeaderboardSnapshot(limit: Int = 100, phoneE164: String?) async throws -> SnakeLeaderboardSnapshot {
         let endpoint = BackendRoute.url(for: BackendRoute.snakeLeaderboard)
 
         var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)
@@ -356,8 +369,8 @@ final class SnakeLeaderboardAPI {
                 throw parseErrorMessage(from: data, statusCode: http.statusCode, response: http)
             }
 
-            if let entries = decodeLeaderboardEntries(from: data) {
-                return entries
+            if let snapshot = decodeLeaderboardSnapshot(from: data) {
+                return snapshot
             }
 
             lastError = .decoding
@@ -367,6 +380,11 @@ final class SnakeLeaderboardAPI {
             throw lastError
         }
         throw APIError.message("Leaderboard service is unavailable.")
+    }
+
+    func fetchLeaderboard(limit: Int = 100, phoneE164: String?) async throws -> [SnakeLeaderboardEntry] {
+        let snapshot = try await fetchLeaderboardSnapshot(limit: limit, phoneE164: phoneE164)
+        return snapshot.entries
     }
 
     @discardableResult
