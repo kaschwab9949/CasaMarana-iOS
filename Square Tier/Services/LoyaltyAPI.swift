@@ -655,29 +655,97 @@ final class LoyaltyAPI {
         try await checkStatus(phoneE164: phoneE164)
     }
 
+    private func statusRequestCandidates(for phoneInput: String, endpoint: URL) -> [URL] {
+        let trimmed = phoneInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+
+        var phoneCandidates: [String] = []
+        if let normalized = normalizePhoneE164(trimmed) {
+            phoneCandidates.append(normalized)
+            let digits = normalized.filter(\.isNumber)
+            if digits.count == 11, digits.hasPrefix("1") {
+                phoneCandidates.append(String(digits))
+                phoneCandidates.append(String(digits.dropFirst()))
+            } else if digits.count >= 10 {
+                phoneCandidates.append(String(digits.suffix(10)))
+            }
+        } else {
+            let digits = trimmed.filter(\.isNumber)
+            if !digits.isEmpty {
+                phoneCandidates.append(trimmed)
+                if digits.count >= 10 {
+                    phoneCandidates.append("+1\(String(digits.suffix(10)))")
+                    phoneCandidates.append(String(digits.suffix(10)))
+                }
+            } else {
+                phoneCandidates.append(trimmed)
+            }
+        }
+
+        let queryKeys = ["phone", "phone_number", "phoneE164"]
+        var seen = Set<String>()
+        var urls: [URL] = []
+
+        for key in queryKeys {
+            for phone in phoneCandidates {
+                let cleaned = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !cleaned.isEmpty else { continue }
+                var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)
+                components?.queryItems = [URLQueryItem(name: key, value: cleaned)]
+                guard let url = components?.url else { continue }
+                let signature = "\(key)|\(cleaned)"
+                if seen.insert(signature).inserted {
+                    urls.append(url)
+                }
+            }
+        }
+
+        return urls
+    }
+
     func checkStatus(phoneE164: String) async throws -> LoyaltyStatusResponse {
         let endpoint = BackendRoute.url(for: BackendRoute.loyaltyStatus)
-
-        var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)
-        components?.queryItems = [URLQueryItem(name: "phone", value: phoneE164)]
-        guard let url = components?.url else { throw APIError.invalidURL }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        try applyAuthHeaders(&request)
-
-        let (data, response) = try await CMHTTP.session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw APIError.message("No HTTP response") }
-
-        guard (200..<300).contains(http.statusCode) else {
-            throw friendlyAPIError(statusCode: http.statusCode, data: data, response: http)
+        let requestCandidates = statusRequestCandidates(for: phoneE164, endpoint: endpoint)
+        guard !requestCandidates.isEmpty else {
+            throw APIError.message("Missing phone number for rewards lookup.")
         }
 
-        do {
-            return try JSONDecoder().decode(LoyaltyStatusResponse.self, from: data)
-        } catch {
-            throw APIError.decoding
+        var lastError: APIError?
+        var fallbackNonEnrolled: LoyaltyStatusResponse?
+
+        for url in requestCandidates {
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            try applyAuthHeaders(&request)
+
+            let (data, response) = try await CMHTTP.session.data(for: request)
+            guard let http = response as? HTTPURLResponse else { throw APIError.message("No HTTP response") }
+
+            if !(200..<300).contains(http.statusCode) {
+                lastError = friendlyAPIError(statusCode: http.statusCode, data: data, response: http)
+                continue
+            }
+
+            do {
+                let decoded = try JSONDecoder().decode(LoyaltyStatusResponse.self, from: data)
+                if decoded.enrolled {
+                    return decoded
+                }
+                if fallbackNonEnrolled == nil {
+                    fallbackNonEnrolled = decoded
+                }
+            } catch {
+                lastError = .decoding
+            }
         }
+
+        if let fallbackNonEnrolled {
+            return fallbackNonEnrolled
+        }
+        if let lastError {
+            throw lastError
+        }
+        throw APIError.message("Rewards status could not be loaded.")
     }
 
     func ensureEnrollment(phoneE164: String, customerID: String? = nil) async throws -> LoyaltyEnrollResponse {

@@ -44,6 +44,16 @@ struct RewardsWalletView: View {
         session.activePhoneE164 ?? ""
     }
 
+    private var maskedLookupPhone: String {
+        let digits = phoneE164.filter(\.isNumber)
+        guard !digits.isEmpty else { return "Unavailable" }
+        let suffix = String(digits.suffix(4))
+        if suffix.isEmpty {
+            return "Unavailable"
+        }
+        return "••• ••• \(suffix)"
+    }
+
     private func currentTierName(points: Int, tiers: [RewardTier]) -> String {
         guard !tiers.isEmpty else { return "Member" }
         let sorted = tiers.sorted { $0.points < $1.points }
@@ -201,6 +211,11 @@ struct RewardsWalletView: View {
                         .accessibilityIdentifier("rewards.wallet.loadingState")
                 }
 
+                Text("Linked phone: \(maskedLookupPhone)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("rewards.wallet.lookupPhoneText")
+
                 if let err = errorText {
                     Text(err)
                         .foregroundStyle(.red)
@@ -245,7 +260,7 @@ struct RewardsWalletView: View {
                         }
                         .padding(.vertical, 8)
                     } else {
-                        Text("This phone number is not enrolled in Square Loyalty yet. Complete enrollment after an in-store transaction, then refresh.")
+                        Text("This phone (\(maskedLookupPhone)) is not enrolled in Square Loyalty yet. Complete enrollment after an in-store transaction, then refresh.")
                             .foregroundStyle(.secondary)
                             .accessibilityIdentifier("rewards.wallet.notEnrolledText")
                     }
