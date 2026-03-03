@@ -21,8 +21,10 @@ struct CreateAccountView: View {
 
     @State private var isCreatingAccount = false
     @State private var error: String? = nil
+    @State private var hasPIIConsent = false
 
     private let phoneVerifyAPI = PhoneVerificationAPI()
+    private let loyaltyAPI = LoyaltyAPI()
 
     private func pinIsValid(_ s: String) -> Bool {
         let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -36,13 +38,17 @@ struct CreateAccountView: View {
         let p2 = confirmPin.trimmingCharacters(in: .whitespacesAndNewlines)
 
         return !name.isEmpty &&
+               name.count <= 300 &&
                profile.isPhoneVerified &&
                !phone.isEmpty &&
                pinIsValid(p1) &&
-               p1 == p2
+               p1 == p2 &&
+               hasPIIConsent &&
+               isValidCustomerEmail(profile.email) &&
+               normalizeCustomerBirthday(profile.birthday) != nil
     }
 
-    private func finalizeAccount() {
+    private func finalizeAccount() async {
         guard !isCreatingAccount else { return }
 
         let name = profile.fullName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -50,16 +56,54 @@ struct CreateAccountView: View {
         let p1 = pin.trimmingCharacters(in: .whitespacesAndNewlines)
         let p2 = confirmPin.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard !name.isEmpty, !phone.isEmpty, pinIsValid(p1), p1 == p2, profile.isPhoneVerified else {
+        guard hasPIIConsent else {
+            error = "Please confirm permission to store your contact information before creating your app login."
+            return
+        }
+
+        guard !name.isEmpty, name.count <= 300 else {
+            error = "Please enter your full name (up to 300 characters)."
+            return
+        }
+
+        guard !phone.isEmpty, pinIsValid(p1), p1 == p2, profile.isPhoneVerified else {
             error = "Please complete all fields correctly, confirm your PIN, and verify your phone number."
             return
         }
 
+        guard isValidCustomerEmail(profile.email) else {
+            error = "Please enter a valid email address."
+            return
+        }
+
+        guard let normalizedBirthday = normalizeCustomerBirthday(profile.birthday) else {
+            error = "Birthday must use YYYY-MM-DD or MM-DD format."
+            return
+        }
+
+        profile.fullName = name
+        profile.email = normalizeCustomerEmail(profile.email)
+        profile.birthday = normalizedBirthday
+
         isCreatingAccount = true
         defer { isCreatingAccount = false }
 
-        session.updateProfile(profile)
-        session.setupAccount(pin: p1)
+        do {
+            let status = try await loyaltyAPI.fetchStatus(phoneE164: phone)
+            guard status.enrolled else {
+                error = "This phone number is not enrolled in Square Loyalty yet. Complete enrollment after an in-store transaction, then sign in to the app."
+                return
+            }
+        } catch {
+            self.error = UserFacingError.message(
+                for: error,
+                context: .auth,
+                fallback: "Could not confirm your Square loyalty enrollment. Please try again."
+            )
+            return
+        }
+
+        session.createAccount(profile: profile, pin: p1)
 
         // If this view is still on the navigation stack, pop it quickly.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -80,6 +124,10 @@ struct CreateAccountView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.bottom, 8)
 
+                Text("Create your app login to access your loyalty account. Your phone must already be enrolled in Square Loyalty.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
                 if let error {
                     Text(error)
                         .foregroundStyle(.red)
@@ -87,18 +135,22 @@ struct CreateAccountView: View {
                         .padding()
                         .background(Color.red.opacity(0.1))
                         .cornerRadius(8)
+                        .accessibilityIdentifier("auth.create.errorText")
                 }
 
                 GroupBox("Personal Info") {
                     VStack(alignment: .leading, spacing: 10) {
                         TextField("Full Name", text: $profile.fullName)
                             .textContentType(.name)
+                            .accessibilityIdentifier("auth.create.fullNameField")
                         TextField("Email Address", text: $profile.email)
                             .keyboardType(.emailAddress)
                             .textContentType(.emailAddress)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled(true)
+                            .accessibilityIdentifier("auth.create.emailField")
                         TextField("Birthday (optional)", text: $profile.birthday)
+                            .accessibilityIdentifier("auth.create.birthdayField")
                     }
                 }
 
@@ -108,6 +160,7 @@ struct CreateAccountView: View {
                             TextField("US Phone Number (e.g. 5205551234)", text: $profile.phoneE164)
                                 .keyboardType(.phonePad)
                                 .textContentType(.telephoneNumber)
+                                .accessibilityIdentifier("auth.create.phoneField")
 
                             Button {
                                 Task {
@@ -133,7 +186,11 @@ struct CreateAccountView: View {
                                         verificationRequestId = nil
                                         verificationCodeSent = false
                                         codeInfo = nil
-                                        self.error = (error as? LocalizedError)?.errorDescription ?? "Failed to send verification code."
+                                        self.error = UserFacingError.message(
+                                            for: error,
+                                            context: .auth,
+                                            fallback: "Failed to send verification code."
+                                        )
                                     }
                                 }
                             } label: {
@@ -145,6 +202,7 @@ struct CreateAccountView: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .disabled(isSendingCode || isCreatingAccount)
+                            .accessibilityIdentifier("auth.create.sendCodeButton")
                         } else {
                             VStack(alignment: .leading, spacing: 8) {
                                 if let info = codeInfo {
@@ -196,7 +254,11 @@ struct CreateAccountView: View {
                                                     error = "Verification failed or incorrect code."
                                                 }
                                             } catch let err {
-                                                error = (err as? LocalizedError)?.errorDescription ?? "Verification failed."
+                                                error = UserFacingError.message(
+                                                    for: err,
+                                                    context: .auth,
+                                                    fallback: "Verification failed."
+                                                )
                                             }
                                         }
                                     } label: {
@@ -207,12 +269,14 @@ struct CreateAccountView: View {
                                     }
                                     .buttonStyle(.bordered)
                                     .disabled(isSendingCode || isVerifyingCode || isCreatingAccount)
+                                    .accessibilityIdentifier("auth.create.verifyCodeButton")
 
                                     if !profile.isPhoneVerified {
                                         TextField("6-digit code", text: $verificationCode)
                                             .keyboardType(.numberPad)
                                             .textContentType(.oneTimeCode)
                                             .textFieldStyle(.roundedBorder)
+                                            .accessibilityIdentifier("auth.create.verificationCodeField")
                                     }
                                 }
                             }
@@ -225,6 +289,7 @@ struct CreateAccountView: View {
                         SecureField("4-digit passcode", text: $pin)
                             .keyboardType(.numberPad)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityIdentifier("auth.create.pinField")
                             .onChange(of: pin) { _, newValue in
                                 let filtered = newValue.filter { $0.isNumber }
                                 if filtered.count > 4 {
@@ -237,6 +302,7 @@ struct CreateAccountView: View {
                         SecureField("Confirm passcode", text: $confirmPin)
                             .keyboardType(.numberPad)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityIdentifier("auth.create.confirmPinField")
                             .onChange(of: confirmPin) { _, newValue in
                                 let filtered = newValue.filter { $0.isNumber }
                                 if filtered.count > 4 {
@@ -254,16 +320,27 @@ struct CreateAccountView: View {
                     }
                 }
 
+                GroupBox("Permission") {
+                    Toggle(isOn: $hasPIIConsent) {
+                        Text("I agree to store my contact information for loyalty account access.")
+                            .font(.footnote)
+                    }
+                }
+
                 Button {
-                    finalizeAccount()
+                    Task { await finalizeAccount() }
                 } label: {
-                    Text("Save & Continue")
-                        .frame(maxWidth: .infinity)
+                    HStack {
+                        if isCreatingAccount { ProgressView() }
+                        Text(isCreatingAccount ? "Saving…" : "Create App Login")
+                            .frame(maxWidth: .infinity)
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!canFinalizeAccount || isCreatingAccount)
+                .accessibilityIdentifier("auth.create.createLoginButton")
 
-                Text("Phone verification is required once to link your Square customer profile. After that, you’ll go straight to Rewards with your phone number and passcode.")
+                Text("Phone verification confirms this device can access your enrolled loyalty account.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .padding(.top, 4)

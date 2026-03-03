@@ -6,15 +6,11 @@
 	<string>$(CM_BACKEND_BASE_URL)</string>
 	<key>CMAPIKey</key>
 	<string>$(CM_API_KEY)</string>
+	<key>CMAPIAuthMode</key>
+	<string>$(CM_API_AUTH_MODE)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Casa Marana uses your location for Smart Check-In to confirm when you're at the venue and award on-site rewards.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Casa Marana uses your location in the background for automatic Smart Check-In when you arrive at the venue.</string>
+	<string>Casa Marana uses your location while you use the app for optional Smart Check-In at the venue.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Use Face ID to quickly unlock your Casa Marana profile.</string>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>location</string>
-	</array>
 </dict>
 </plist>

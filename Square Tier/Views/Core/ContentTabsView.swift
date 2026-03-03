@@ -17,7 +17,7 @@ struct CasaHomeToolbar: ViewModifier {
     func body(content: Content) -> some View {
         content.toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                HomeButtonCircle(diameter: 144) {
+                HomeButtonCircle(diameter: 36) {
                     selectedTab = .home
                 }
                 .accessibilityLabel("Go to Home")
@@ -36,6 +36,8 @@ struct ContentTabsView: View {
     @EnvironmentObject var session: AppSession
     @EnvironmentObject var location: VenueLocationManager
     @AppStorage("cm.selectedTab") private var selectedTabRaw: String = AppTab.home.rawValue
+    @AppStorage("cm.smartCheckInEnabled") private var smartCheckInEnabled: Bool = false
+    @State private var lastLocationPostTs: TimeInterval = 0
 
     private let loyaltyAPI = LoyaltyAPI()
 
@@ -132,11 +134,11 @@ struct ContentTabsView: View {
             // SNAKE GAME
             NavigationStack {
                 SnakeGameView()
-                    .accessibilityIdentifier("screen.snake")
                     .navigationTitle("Snake")
                     .navigationBarTitleDisplayMode(NavigationBarItem.TitleDisplayMode.large)
                     .casaHomeToolbar(selectedTab: selectedTab)
             }
+            .accessibilityIdentifier("screen.snake")
             .tabItem {
                 Label("Play Snake", systemImage: "gamecontroller.fill")
                     .accessibilityIdentifier("tab.snake")
@@ -160,11 +162,18 @@ struct ContentTabsView: View {
         .tint(Color.mint) // AppBrand.accent is mint
         .onAppear {
             applyUITestSelectedTabOverrideIfPresent()
-
-            // Start location sampling (foreground when authorizedWhenInUse; background only when authorizedAlways).
-            location.start()
+            if smartCheckInEnabled {
+                location.start()
+            } else {
+                location.stop()
+            }
         }
         .onChange(of: location.authorization) { _, newValue in
+            guard smartCheckInEnabled else {
+                location.stop()
+                return
+            }
+
             switch newValue {
             case .authorizedAlways, .authorizedWhenInUse:
                 location.start()
@@ -172,37 +181,38 @@ struct ContentTabsView: View {
                 location.stop()
             }
         }
+        .onChange(of: smartCheckInEnabled) { _, enabled in
+            if enabled {
+                location.start()
+            } else {
+                location.stop()
+            }
+        }
         .onChange(of: location.lastLocationSampledAt) { _, newValue in
             guard newValue != nil else { return }
+            guard smartCheckInEnabled else { return }
 
-            // Read the latest retained sample and POST it to the backend.
-            let dict = UserDefaults.standard.dictionary(forKey: "cm.lastLocationSample.v1") ?? [:]
             guard
-                let lat = dict["lat"] as? Double,
-                let lon = dict["lon"] as? Double,
-                let accuracy = dict["accuracy"] as? Double,
-                let timestamp = dict["timestamp"] as? TimeInterval,
+                let sample = location.latestSample,
                 let phone = session.verifiedPhoneE164
             else { return }
 
             // Throttle posts to once per 5 minutes max
             let now = Date().timeIntervalSince1970
-            let lastPosted = UserDefaults.standard.double(forKey: "cm.lastLocationSample.lastPostedTs.v1")
+            let lastPosted = lastLocationPostTs
             if now - lastPosted > 300 {
                 Task {
                     do {
                         try await loyaltyAPI.postLocationSample(
                             phoneE164: phone,
-                            lat: lat,
-                            lon: lon,
-                            accuracy: accuracy,
-                            timestamp: timestamp
+                            lat: sample.lat,
+                            lon: sample.lon,
+                            accuracy: sample.accuracy,
+                            timestamp: sample.timestamp
                         )
-                        UserDefaults.standard.set(now, forKey: "cm.lastLocationSample.lastPostedTs.v1")
+                        lastLocationPostTs = now
                     } catch {
-#if DEBUG
-                        print("postLocationSample failed: \(error)")
-#endif
+                        // Smart Check-In is best-effort.
                     }
                 }
             }

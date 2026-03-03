@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - Rewards Sign In (username/password; no SMS required for repeat logins)
+// MARK: - Rewards Sign In
 
 struct RewardsAuthEntryView: View {
     var body: some View {
@@ -27,6 +27,10 @@ struct SignInView: View {
         return digits
     }
 
+    private var uiTestingSeedsDemoAccount: Bool {
+        ProcessInfo.processInfo.arguments.contains("-ui-testing-seed-demo-account")
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -38,8 +42,12 @@ struct SignInView: View {
                     .font(.largeTitle)
                     .fontWeight(.bold)
 
-                Text("Sign in to your Casa Marana rewards profile.")
+                Text("Sign in to your Casa Marana app login to view your Square loyalty account.")
                     .font(.body)
+                    .foregroundStyle(.secondary)
+
+                Text("Loyalty enrollment happens after an in-store transaction. Then create your app login to view your loyalty account.")
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
 
                 GroupBox {
@@ -77,23 +85,43 @@ struct SignInView: View {
                         return
                     }
 
-                    // In a real app, this makes a network request to authenticate.
-                    // For the demo, we assume the user creates an account locally and logs in with it.
-                    let demoPhone = "+1\(input10)"
-                    let demoPassword = pw
+                    let normalizedInput = "+1\(input10)"
 
-                    let p = UserProfile(
-                        fullName: "Member",
-                        phoneE164: demoPhone,
-                        email: "",
-                        birthday: "",
-                        isPhoneVerified: true,
-                        phoneVerificationToken: "demo_token_123"
-                    )
+                    // UI-test-only fallback to keep tests deterministic on clean simulators.
+                    if uiTestingSeedsDemoAccount && !session.hasSetup {
+                        let seeded = UserProfile(
+                            fullName: "UITest Member",
+                            phoneE164: normalizedInput,
+                            email: "",
+                            birthday: "",
+                            isPhoneVerified: true,
+                            phoneVerificationToken: "ui_test_seeded_token"
+                        )
+                        session.createAccount(profile: seeded, pin: pw)
+                    }
 
-                    // Reuse the existing local PIN storage path to unlock the app.
-                    // Using the same 4-digit value for PIN keeps the change minimal.
-                    session.createAccount(profile: p, pin: demoPassword)
+                    guard session.hasSetup else {
+                        error = "No app login found for this device. Tap Create App Login to verify your phone and connect loyalty."
+                        return
+                    }
+
+                    guard session.unlock(pin: pw) else {
+                        error = "Invalid phone number or PIN."
+                        return
+                    }
+
+                    let storedPhone = normalizePhoneE164(session.profile.phoneE164) ?? session.profile.phoneE164
+                    guard !storedPhone.isEmpty else {
+                        session.lock()
+                        error = "Profile data is incomplete. Please create your app login again."
+                        return
+                    }
+
+                    guard storedPhone == normalizedInput else {
+                        session.lock()
+                        error = "This phone number does not match the app login on this device."
+                        return
+                    }
                 } label: {
                     Text("Sign In")
                         .frame(maxWidth: .infinity)
@@ -104,14 +132,14 @@ struct SignInView: View {
                 NavigationLink {
                     CreateAccountView()
                 } label: {
-                    Text("Don't have an account? Create one.")
+                    Text("Create app login")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 .padding(.top, 8)
                 .accessibilityIdentifier("rewards.auth.createAccountLink")
 
-                Text("Sign in uses your phone number and password. Phone verification is only required when creating an account.")
+                Text("App login is separate from Square POS. Use a verified phone number to connect and view points.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 

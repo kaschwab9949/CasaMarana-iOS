@@ -7,10 +7,38 @@ struct RewardsWalletView: View {
     @State private var status: LoyaltyStatusResponse? = nil
     @State private var isLoading: Bool = false
     @State private var errorText: String? = nil
+    @State private var nextRefreshAllowedAt: Date = .distantPast
 
     @State private var passToAdd: PassWrapper? = nil
 
     private let loyaltyAPI = LoyaltyAPI()
+
+    private func normalizedRewardTiers(from status: LoyaltyStatusResponse) -> [RewardTier] {
+        if !status.rewardTiers.isEmpty {
+            return status.rewardTiers
+        }
+
+        // Fallback to app-defined thresholds so tier/reward progression remains visible
+        // even when backend only returns points + enrollment.
+        return MembershipTier.all.map {
+            RewardTier(id: $0.id, name: $0.name, points: $0.minPoints)
+        }
+    }
+
+    private func displayTierName(for status: LoyaltyStatusResponse) -> String {
+        if let backendTier = status.tierName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !backendTier.isEmpty {
+            return backendTier
+        }
+        return currentTierName(points: status.points, tiers: normalizedRewardTiers(from: status))
+    }
+
+    private func availableRewards(for status: LoyaltyStatusResponse) -> [String] {
+        if !status.availableRewards.isEmpty {
+            return status.availableRewards
+        }
+        return MembershipTier.tier(for: status.points).benefits
+    }
 
     private var phoneE164: String {
         session.verifiedPhoneE164 ?? ""
@@ -24,11 +52,74 @@ struct RewardsWalletView: View {
         return best?.name ?? "Member"
     }
 
+    private func rewardsForTier(_ tier: RewardTier) -> [String] {
+        if let match = MembershipTier.all.first(where: { $0.name.caseInsensitiveCompare(tier.name) == .orderedSame }) {
+            return match.benefits
+        }
+        return ["In-store loyalty reward"]
+    }
+
+    private func customerSegmentLabels(for status: LoyaltyStatusResponse) -> [String] {
+        var labels = status.customerSegments.map { segment in
+            let name = segment.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return name.isEmpty ? segment.id : name
+        }
+
+        if labels.isEmpty {
+            labels = status.segmentIDs
+        }
+
+        var seen = Set<String>()
+        var uniqueLabels: [String] = []
+        for label in labels {
+            let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if seen.insert(trimmed).inserted {
+                uniqueLabels.append(trimmed)
+            }
+        }
+        return uniqueLabels
+    }
+
+    private func customerGroupLabels(for status: LoyaltyStatusResponse) -> [String] {
+        var labels = status.customerGroups.map { group in
+            let name = group.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return name.isEmpty ? group.id : name
+        }
+
+        if labels.isEmpty {
+            labels = status.groupIDs
+        }
+
+        var seen = Set<String>()
+        var uniqueLabels: [String] = []
+        for label in labels {
+            let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if seen.insert(trimmed).inserted {
+                uniqueLabels.append(trimmed)
+            }
+        }
+        return uniqueLabels
+    }
+
     private func loadStatus() async {
         guard !phoneE164.isEmpty else {
             await MainActor.run { self.errorText = "Missing phone number." }
             return
         }
+
+        guard !isLoading else { return }
+
+        let now = Date()
+        guard now >= nextRefreshAllowedAt else {
+            let wait = max(1, Int(ceil(nextRefreshAllowedAt.timeIntervalSince(now))))
+            await MainActor.run {
+                self.errorText = "Please wait \(wait) seconds before trying Refresh again."
+            }
+            return
+        }
+
         await MainActor.run {
             self.isLoading = true
             self.errorText = nil
@@ -39,12 +130,20 @@ struct RewardsWalletView: View {
             await MainActor.run {
                 self.status = res
                 self.isLoading = false
+                self.nextRefreshAllowedAt = Date().addingTimeInterval(5)
             }
         } catch {
             await MainActor.run {
-                self.status = nil
                 self.isLoading = false
-                self.errorText = (error as? LocalizedError)?.errorDescription ?? "Failed to load rewards."
+                if let apiError = error as? APIError, case let .rateLimited(retryAfter) = apiError {
+                    let wait = max(15, Int(ceil(retryAfter ?? 60)))
+                    self.nextRefreshAllowedAt = Date().addingTimeInterval(TimeInterval(wait))
+                }
+                self.errorText = UserFacingError.message(
+                    for: error,
+                    context: .rewards,
+                    fallback: "Failed to load rewards."
+                )
             }
         }
     }
@@ -54,11 +153,14 @@ struct RewardsWalletView: View {
 
         let name = session.profile.fullName.trimmingCharacters(in: .whitespacesAndNewlines)
         let safeName = name.isEmpty ? "Casa Marana Member" : name
-        let tierName = currentTierName(points: s.points, tiers: s.rewardTiers)
+        let tierName = displayTierName(for: s)
 
         // The ID shouldn't change for the user if they're the same person.
         // For Apple Wallet, using the phone number as the member id is typical if there is no internal GUID.
         let memberId = phoneE164.replacingOccurrences(of: "+", with: "")
+        let phoneForPass = s.phoneNumber?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            ? (s.phoneNumber ?? phoneE164)
+            : phoneE164
 
         // The Apple Wallet pass serial number must be unique per pass added to Apple Wallet.
         // Usually backend handles this, but since we are generating passes here we'll use a combination of user id and a timestamp or UUID.
@@ -70,6 +172,8 @@ struct RewardsWalletView: View {
                 serial: serial,
                 memberName: safeName,
                 memberId: memberId,
+                phoneNumber: phoneForPass,
+                membershipStartDate: s.membershipStartDate,
                 tierName: tierName,
                 points: s.points
             )
@@ -79,16 +183,12 @@ struct RewardsWalletView: View {
                 self.passToAdd = PassWrapper(pass: pass)
             }
         } catch {
-            // If the backend API isn't built yet, we fallback to a bundled dummy pass if one exists.
-            if let bundleData = WalletPassBundleFallback.loadBundledPassData(),
-               let pass = try? PKPass(data: bundleData) {
-                await MainActor.run {
-                    self.passToAdd = PassWrapper(pass: pass)
-                }
-            } else {
-                await MainActor.run {
-                    self.errorText = (error as? LocalizedError)?.errorDescription ?? "Could not load Apple Wallet pass."
-                }
+            await MainActor.run {
+                self.errorText = UserFacingError.message(
+                    for: error,
+                    context: .wallet,
+                    fallback: "Could not load Apple Wallet pass."
+                )
             }
         }
     }
@@ -111,10 +211,11 @@ struct RewardsWalletView: View {
                 if let s = status {
                     if s.enrolled {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Current Tier")
+                            Text("Loyalty Status")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
-                            Text(currentTierName(points: s.points, tiers: s.rewardTiers))
+
+                            Text(displayTierName(for: s))
                                 .font(.title2)
                                 .fontWeight(.bold)
                                 .foregroundStyle(Color.mint)
@@ -129,15 +230,29 @@ struct RewardsWalletView: View {
                             .frame(height: 50)
                             .padding(.top, 12)
                             .accessibilityIdentifier("rewards.wallet.addToWalletButton")
+
+                            Text("Your loyalty pass shows the business name, available point balance, membership start date, account holder name, and phone number.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+
+                            Text("After adding it to Wallet, tap the seller display or contactless reader at checkout to check in, earn points, and redeem rewards.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+
+                            Text("Adding loyalty passes is only available on iOS devices.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
                         }
                         .padding(.vertical, 8)
                     } else {
-                        Text("Phone number is not enrolled in rewards yet.")
+                        Text("This phone number is not enrolled in Square Loyalty yet. Complete enrollment after an in-store transaction, then refresh.")
                             .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("rewards.wallet.notEnrolledText")
                     }
                 } else {
                     Text("No rewards data loaded yet.")
                         .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("rewards.wallet.noDataText")
                 }
 
                 Button {
@@ -146,18 +261,77 @@ struct RewardsWalletView: View {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
                 .accessibilityIdentifier("rewards.wallet.refreshButton")
+                .disabled(isLoading || Date() < nextRefreshAllowedAt)
+
+                if Date() < nextRefreshAllowedAt {
+                    Text("Refresh available in \(max(1, Int(ceil(nextRefreshAllowedAt.timeIntervalSinceNow))))s.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
 
-            if let s = status, !s.rewardTiers.isEmpty {
-                Section("Reward Tiers") {
-                    ForEach(s.rewardTiers.sorted(by: { $0.points < $1.points })) { t in
-                        HStack {
-                            Text(t.name)
-                            Spacer()
-                            Text("\(t.points)+")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+            if let s = status, s.enrolled, !availableRewards(for: s).isEmpty {
+                Section("Available Rewards") {
+                    ForEach(Array(availableRewards(for: s).prefix(6).enumerated()), id: \.offset) { _, item in
+                        Text(item)
+                    }
+                }
+            }
+
+            if let s = status, s.enrolled, !customerSegmentLabels(for: s).isEmpty {
+                Section("Customer Segments") {
+                    ForEach(Array(customerSegmentLabels(for: s).prefix(6)), id: \.self) { segment in
+                        Text(segment)
+                    }
+
+                    Text("Segments are managed in Square Dashboard and synced read-only in the app.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let s = status, s.enrolled, !customerGroupLabels(for: s).isEmpty {
+                Section("Customer Groups") {
+                    ForEach(Array(customerGroupLabels(for: s).prefix(6)), id: \.self) { group in
+                        Text(group)
+                    }
+
+                    Text("Groups are manual collections managed in Square Dashboard and synced read-only in the app.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let s = status, s.enrolled {
+                let tiers = normalizedRewardTiers(from: s)
+
+                Section("Rewards You Can Get") {
+                    ForEach(tiers.sorted(by: { $0.points < $1.points })) { tier in
+                        let unlocked = s.points >= tier.points
+                        let pointsNeeded = max(0, tier.points - s.points)
+                        let rewards = rewardsForTier(tier)
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text(tier.name)
+                                    .font(.headline)
+                                Spacer()
+                                Text("\(tier.points)+ pts")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            ForEach(rewards.prefix(3), id: \.self) { item in
+                                Text("• \(item)")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Text(unlocked ? "Unlocked" : "Need \(pointsNeeded) more points")
+                                .font(.caption)
+                                .foregroundStyle(unlocked ? .mint : .secondary)
                         }
+                        .padding(.vertical, 4)
                     }
                 }
             }

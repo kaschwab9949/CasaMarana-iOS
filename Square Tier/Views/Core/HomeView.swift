@@ -9,6 +9,8 @@ struct HomeView: View {
     // Website links
     private let websiteURL = URL(string: "https://www.casamarana.com")!
     private let newsletterURL = URL(string: "https://www.casamarana.com/newsletter")!
+    private let supportEmailURL = URL(string: "mailto:casacbw@gmail.com")!
+    private let mapsPlaceURL = URL(string: "https://maps.apple.com/?q=Casa%20Marana%20Marana%20AZ")!
 
     private var addressLine1: String {
         destinationAddress.components(separatedBy: ",").first ?? destinationAddress
@@ -60,8 +62,8 @@ struct HomeView: View {
                             CMBrandPill(text: "Newsletter", systemImage: "envelope")
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        Link(destination: URL(string: "https://g.page/r/...")!) { // replace with real maps link
-                            CMBrandPill(text: "Rate Us", systemImage: "star.fill")
+                        Link(destination: mapsPlaceURL) {
+                            CMBrandPill(text: "Find Us on Maps", systemImage: "map.fill")
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
@@ -116,8 +118,8 @@ struct HomeView: View {
                             Label("Visit Website", systemImage: "safari")
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        Link(destination: URL(string: "tel:5205551234")!) { // replace w/ actual
-                            Label("Call Us", systemImage: "phone")
+                        Link(destination: supportEmailURL) {
+                            Label("Email Us", systemImage: "envelope")
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }

@@ -2,6 +2,25 @@ import Foundation
 import SwiftUI
 import Combine
 
+private enum HTTP {
+    static let session: URLSession = {
+        let cfg = URLSessionConfiguration.default
+        cfg.waitsForConnectivity = true
+        cfg.timeoutIntervalForRequest = 20
+        cfg.timeoutIntervalForResource = 60
+        cfg.requestCachePolicy = .reloadIgnoringLocalCacheData
+        cfg.urlCache = nil
+        return URLSession(configuration: cfg)
+    }()
+}
+
+struct EventsParserDiagnostics {
+    var linksFound: Int = 0
+    var pagesParsed: Int = 0
+    var eventsProduced: Int = 0
+    var usedListingFallback: Bool = false
+}
+
 struct CasaEvent: Identifiable, Hashable, Codable {
     let id: String
     let title: String
@@ -21,10 +40,14 @@ final class EventsFeedModel: ObservableObject {
     @Published var error: String? = nil
     @Published var notice: String? = nil
     @Published var isLoading: Bool = false
+    @Published var diagnostics = EventsParserDiagnostics()
 
-    private let eventsURL = URL(string: "https://www.casamarana.com/events")!
+    private let eventsURL = URL(string: "https://www.casamarana.com/events/")!
     private let cacheKey = "cm.events.cache.v1"
     private let cacheDateKey = "cm.events.cacheDate.v1"
+    private let cacheTTL: TimeInterval = 20 * 60
+    private var consecutiveFailures = 0
+    private var nextRetryAt: Date? = nil
 
     init() {
         loadCache()
@@ -34,7 +57,8 @@ final class EventsFeedModel: ObservableObject {
         guard let data = UserDefaults.standard.data(forKey: cacheKey),
               let date = UserDefaults.standard.object(forKey: cacheDateKey) as? Date else { return }
         do {
-            self.events = try JSONDecoder().decode([CasaEvent].self, from: data)
+            let decoded = try JSONDecoder().decode([CasaEvent].self, from: data)
+            self.events = decoded.map(Self.sanitizeEvent)
             self.lastUpdated = date
         } catch {
             // ignore
@@ -43,10 +67,11 @@ final class EventsFeedModel: ObservableObject {
 
     @MainActor
     private func saveCache(_ items: [CasaEvent]) {
-        self.events = items
+        let sanitized = items.map(Self.sanitizeEvent)
+        self.events = sanitized
         self.lastUpdated = Date()
         do {
-            let data = try JSONEncoder().encode(items)
+            let data = try JSONEncoder().encode(sanitized)
             UserDefaults.standard.set(data, forKey: cacheKey)
             UserDefaults.standard.set(Date(), forKey: cacheDateKey)
         } catch {
@@ -54,19 +79,30 @@ final class EventsFeedModel: ObservableObject {
         }
     }
 
+    private func isCacheStale(referenceDate: Date = Date()) -> Bool {
+        guard let lastUpdated else { return true }
+        return referenceDate.timeIntervalSince(lastUpdated) >= cacheTTL
+    }
+
+    private func backoffDelaySeconds(after failures: Int) -> TimeInterval {
+        let delay = pow(2, Double(max(1, failures))) * 5
+        return min(300, delay)
+    }
+
     private static func fetchHTML(from url: URL) async throws -> (html: String, http: HTTPURLResponse) {
         var req = URLRequest(url: url)
         req.cachePolicy = .reloadIgnoringLocalCacheData
         req.timeoutInterval = 25
 
-        let (data, resp) = try await CMHTTP.session.data(for: req)
+        let (data, resp) = try await HTTP.session.data(for: req)
         guard let http = resp as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         return (String(decoding: data, as: UTF8.self), http)
     }
 
-    func refresh() async {
-        // Prevent overlapping refreshes
+    func refresh(force: Bool = false) async {
         if await MainActor.run(body: { self.isLoading }) { return }
+
+        let refreshStartedAt = Date()
 
         await MainActor.run {
             self.isLoading = true
@@ -76,32 +112,39 @@ final class EventsFeedModel: ObservableObject {
 
         defer { Task { @MainActor in self.isLoading = false } }
 
+        if !force {
+            if let nextRetryAt, refreshStartedAt < nextRetryAt, !events.isEmpty {
+                await MainActor.run {
+                    let waitSeconds = max(1, Int(nextRetryAt.timeIntervalSince(refreshStartedAt)))
+                    self.notice = "Events are retrying in \(waitSeconds)s. Showing your last successful update."
+                }
+                return
+            }
+
+            if !isCacheStale(referenceDate: refreshStartedAt), !events.isEmpty {
+                await MainActor.run {
+                    self.notice = "Showing recently cached events."
+                }
+                return
+            }
+        }
+
         do {
-            // 1) Fetch the listing page
+            var diagnostics = EventsParserDiagnostics()
+
             let (listingHTML, listingHTTP) = try await Self.fetchHTML(from: eventsURL)
             guard (200..<300).contains(listingHTTP.statusCode) else {
-                await MainActor.run {
-                    self.error = "Failed to load events list (HTTP \(listingHTTP.statusCode))"
-                    self.lastUpdated = Date()
-                }
-                return
+                throw APIError.message("Events listing request failed with status \(listingHTTP.statusCode).")
             }
 
-            // 2) Extract event page URLs
             let eventURLs = Self.extractEventURLs(from: listingHTML)
-            guard !eventURLs.isEmpty else {
-                await MainActor.run {
-                    self.events = []
-                    self.lastUpdated = Date()
-                }
-                return
-            }
+            diagnostics.linksFound = eventURLs.count
 
-            // 3) Fetch each event page and parse JSON-LD (concurrency-limited)
             let urlsToFetch = Array(eventURLs.prefix(25))
-            let maxConcurrentFetches = 6
+            diagnostics.pagesParsed = urlsToFetch.count
 
-            let parsed: [CasaEvent] = await withTaskGroup(of: [CasaEvent].self, returning: [CasaEvent].self) { group in
+            let maxConcurrentFetches = 6
+            var parsed: [CasaEvent] = await withTaskGroup(of: [CasaEvent].self, returning: [CasaEvent].self) { group in
                 func addTask(for url: URL) {
                     group.addTask {
                         await Self.fetchOneEventPage(url: url)
@@ -111,13 +154,11 @@ final class EventsFeedModel: ObservableObject {
                 var results: [CasaEvent] = []
                 var index = 0
 
-                // Add initial batch
                 while index < min(maxConcurrentFetches, urlsToFetch.count) {
                     addTask(for: urlsToFetch[index])
                     index += 1
                 }
 
-                // Wait for one to finish, add the next, repeat
                 while let found = await group.next() {
                     results.append(contentsOf: found)
                     if index < urlsToFetch.count {
@@ -132,48 +173,83 @@ final class EventsFeedModel: ObservableObject {
                 return
             }
 
-            // 4) De-dupe by id, filter to upcoming-ish, and sort by date
+            if parsed.isEmpty {
+                let listingFallback = Self.extractEventsFromListing(listingHTML: listingHTML, listingURL: eventsURL)
+                if !listingFallback.isEmpty {
+                    parsed = listingFallback
+                    diagnostics.usedListingFallback = true
+                }
+            }
+
             var unique: [String: CasaEvent] = [:]
-            for e in parsed { unique[e.id] = e }
+            for event in parsed {
+                unique[event.id] = event
+            }
 
             let now = Date()
-            let upcoming = unique.values.filter { e in
-                if let end = e.endDate { return end >= now }
-                if let start = e.startDate {
-                    // keep ongoing/recent events briefly
+            let upcoming = unique.values.filter { event in
+                if let end = event.endDate { return end >= now }
+                if let start = event.startDate {
                     return start.addingTimeInterval(3600 * 4) >= now
                 }
-                // If it has NO date, keep it (Squarespace TBDs)
                 return true
             }
 
-            let sorted = upcoming.sorted { a, b in
-                switch (a.startDate, b.startDate) {
-                case let (d1?, d2?): return d1 < d2
-                case (nil, _): return false // put TBD at end
-                case (_, nil): return true
+            let sorted = upcoming.sorted { lhs, rhs in
+                switch (lhs.startDate, rhs.startDate) {
+                case let (l?, r?):
+                    return l < r
+                case (nil, _):
+                    return false
+                case (_, nil):
+                    return true
                 }
             }
 
+            diagnostics.eventsProduced = sorted.count
+
             await MainActor.run {
-                // If we found NO dates on some events, add a helpful notice.
+                self.diagnostics = diagnostics
+            }
+
+            if sorted.isEmpty {
+                await MainActor.run {
+                    if self.events.isEmpty {
+                        self.notice = "No events are currently published."
+                    } else {
+                        self.notice = "No events were parsed from the latest page. Showing last successful results."
+                    }
+                }
+                consecutiveFailures = 0
+                nextRetryAt = nil
+                return
+            }
+
+            await MainActor.run {
                 let missingDates = sorted.filter { $0.startDate == nil }.count
                 if missingDates == sorted.count {
                     self.notice = "We found events, but no clear dates for them. Tap each event for details."
                 } else if missingDates > 0 {
-                    self.notice = "Some events don’t include a readable date/time yet and will show as “Date TBD”."
+                    self.notice = "Some events don’t include a readable date/time yet and will show as Date TBD."
+                } else {
+                    self.notice = nil
                 }
             }
 
             saveCache(sorted)
+            consecutiveFailures = 0
+            nextRetryAt = nil
         } catch {
+            consecutiveFailures += 1
+            let delay = backoffDelaySeconds(after: consecutiveFailures)
+            nextRetryAt = Date().addingTimeInterval(delay)
+
             await MainActor.run {
-                if let urlErr = error as? URLError {
-                    self.error = "Network error: \(urlErr.code) — \(urlErr.localizedDescription)"
+                if self.events.isEmpty {
+                    self.error = "Could not load events right now. Please try again shortly."
                 } else {
-                    self.error = "Error: \(error.localizedDescription)"
+                    self.notice = "Couldn’t refresh events right now. Showing your last successful update."
                 }
-                self.lastUpdated = Date()
             }
         }
     }
@@ -185,7 +261,8 @@ final class EventsFeedModel: ObservableObject {
             guard (200..<300).contains(http.statusCode) else { return [] }
 
             // Extract JSON-LD blocks from each event page
-            let regex = try NSRegularExpression(pattern: "<script type=\"application/ld\\+json\">([\\s\\S]*?)</script>", options: .caseInsensitive)
+            let pattern = #"<script[^>]*type=\"application/ld\+json\"[^>]*>(.*?)</script>"#
+            let regex = try NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators, .caseInsensitive])
             let ns = html as NSString
             let matches = regex.matches(in: html, range: NSRange(location: 0, length: ns.length))
 
@@ -217,8 +294,8 @@ final class EventsFeedModel: ObservableObject {
 
             // Overwrite JSON-LD values with HTML-extracted values as they are typically more correct visually.
             let normalized = CasaEvent(
-                id: url.path,
-                title: extractH1Title(from: html) ?? best.title,
+                id: "url:\(url.absoluteString)",
+                title: Self.sanitizeTitle(extractH1Title(from: html) ?? best.title),
                 startDate: extractedStart ?? best.startDate,
                 endDate: extractedEnd ?? best.endDate,
                 summary: htmlSummary ?? best.summary,
@@ -239,7 +316,8 @@ final class EventsFeedModel: ObservableObject {
         let text = stripHTML(html)
         let lines = text
             .split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .map { String($0).trimmingCharacters(in: .whitespaces) }
+            .map { decodeHTMLEntities($0) }
             .filter { !$0.isEmpty }
 
         let junkPrefixes = [
@@ -250,9 +328,11 @@ final class EventsFeedModel: ObservableObject {
         ]
 
         if let title = lines.first(where: { line in
-            !junkPrefixes.contains(where: { line.hasPrefix($0) })
+            !junkPrefixes.contains(where: { line.hasPrefix($0) }) &&
+            !line.allSatisfy(\.isNumber) &&
+            line.count > 1
         }) {
-            return decodeHTMLEntities(title)
+            return title
         }
 
         return nil
@@ -295,14 +375,12 @@ final class EventsFeedModel: ObservableObject {
         // Squarespace event pages display date line and time range in plain text.
         let text = stripHTML(html)
 
-        // Date like: "Wednesday, March 19, 2025"
-        let dateRegex = try! NSRegularExpression(pattern: "(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\\s(January|February|March|April|May|June|July|August|September|October|November|December)\\s\\d{1,2},\\s\\d{4}")
+        guard let dateRegex = try? NSRegularExpression(pattern: "(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\\s(January|February|March|April|May|June|July|August|September|October|November|December)\\s\\d{1,2},\\s\\d{4}") else { return (nil, nil) }
         let dateMatch = dateRegex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text))
         guard let dateRange = dateMatch?.range else { return (nil, nil) }
         let dateStr = (text as NSString).substring(with: dateRange)
 
-        // Times like: "6:30 PM", "8:30 PM"
-        let timeRegex = try! NSRegularExpression(pattern: "(\\d{1,2}:\\d{2}\\s(?:AM|PM))")
+        guard let timeRegex = try? NSRegularExpression(pattern: "(\\d{1,2}:\\d{2}\\s(?:AM|PM))") else { return (nil, nil) }
         let timeMatches = timeRegex.matches(in: text, range: NSRange(text.startIndex..., in: text))
 
         let ns = text as NSString
@@ -342,15 +420,19 @@ final class EventsFeedModel: ObservableObject {
         return s
     }
 
-    private static func decodeHTMLEntities(_ s: String) -> String {
+    nonisolated private static func decodeHTMLEntities(_ s: String) -> String {
         guard let data = s.data(using: .utf8) else { return s }
-        if let attr = try? NSAttributedString(
-            data: data,
-            options: [.documentType: NSAttributedString.DocumentType.html, .characterEncoding: String.Encoding.utf8.rawValue],
-            documentAttributes: nil
-        ) {
+
+        // Use NSAttributedString HTML decoding with correctly typed options.
+        let nsOptions: [NSAttributedString.DocumentReadingOptionKey: Any] = [
+            .documentType: NSAttributedString.DocumentType.html,
+            .characterEncoding: String.Encoding.utf8.rawValue
+        ]
+        if let attr = try? NSAttributedString(data: data, options: nsOptions, documentAttributes: nil) {
             return attr.string
         }
+
+        // Final fallback: return original string
         return s
     }
 
@@ -359,7 +441,7 @@ final class EventsFeedModel: ObservableObject {
         // Look for links to paths that start with /events/ or /botanica-events/
         // Only casamarana.com absolute paths, or root-relative paths.
 
-        let regex = try! NSRegularExpression(pattern: "href\\s*=\\s*\"([^\"]+)\"", options: .caseInsensitive)
+        guard let regex = try? NSRegularExpression(pattern: "href\\s*=\\s*\"([^\"]+)\"", options: .caseInsensitive) else { return [] }
 
         let ns = listingHTML as NSString
         let matches = regex.matches(in: listingHTML, range: NSRange(location: 0, length: ns.length))
@@ -411,12 +493,73 @@ final class EventsFeedModel: ObservableObject {
         return urls
     }
 
+    private static func extractEventsFromListing(listingHTML: String, listingURL: URL) -> [CasaEvent] {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"<script[^>]*type=\"application/ld\+json\"[^>]*>(.*?)</script>"#,
+            options: [.dotMatchesLineSeparators, .caseInsensitive]
+        ) else {
+            return []
+        }
+
+        let ns = listingHTML as NSString
+        let matches = regex.matches(in: listingHTML, range: NSRange(location: 0, length: ns.length))
+
+        var parsed: [CasaEvent] = []
+        for match in matches {
+            guard match.numberOfRanges >= 2 else { continue }
+            let block = ns.substring(with: match.range(at: 1))
+            guard let data = block.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) else {
+                continue
+            }
+            parsed.append(contentsOf: parseEvents(from: json))
+        }
+
+        return parsed.enumerated().map { index, event in
+            let normalizedID = event.id.trimmingCharacters(in: .whitespacesAndNewlines)
+            let fallbackID = "listing:\(listingURL.absoluteString)#\(index)"
+            let eventURL = event.url ?? listingURL
+            return CasaEvent(
+                id: normalizedID.isEmpty ? fallbackID : normalizedID,
+                title: sanitizeTitle(event.title),
+                startDate: event.startDate,
+                endDate: event.endDate,
+                summary: event.summary,
+                locationName: event.locationName,
+                locationAddress: event.locationAddress,
+                url: eventURL
+            )
+        }
+    }
+
     private static func parseDate(_ s: String?) -> Date? {
         guard let s else { return nil }
         let iso = ISO8601DateFormatter()
         let isoFrac = ISO8601DateFormatter()
         isoFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return isoFrac.date(from: s) ?? iso.date(from: s)
+    }
+
+    nonisolated private static func sanitizeTitle(_ raw: String) -> String {
+        let cleaned = decodeHTMLEntities(raw).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return "Event" }
+        if cleaned.allSatisfy(\.isNumber) {
+            return "Event"
+        }
+        return cleaned
+    }
+
+    nonisolated private static func sanitizeEvent(_ event: CasaEvent) -> CasaEvent {
+        CasaEvent(
+            id: event.id,
+            title: sanitizeTitle(event.title),
+            startDate: event.startDate,
+            endDate: event.endDate,
+            summary: event.summary,
+            locationName: event.locationName,
+            locationAddress: event.locationAddress,
+            url: event.url
+        )
     }
 
     private static func parseEvents(from obj: Any) -> [CasaEvent] {
@@ -439,7 +582,7 @@ final class EventsFeedModel: ObservableObject {
         walk(obj)
 
         return dicts.compactMap { d in
-            let title = (d["name"] as? String) ?? "Event"
+            let title = Self.sanitizeTitle((d["name"] as? String) ?? "Event")
             let start = Self.parseDate(d["startDate"] as? String)
             let end = Self.parseDate(d["endDate"] as? String)
             let summary = d["description"] as? String

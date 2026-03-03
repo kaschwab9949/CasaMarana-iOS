@@ -11,12 +11,6 @@ struct EventsView: View {
     var body: some View {
         List {
             Section {
-                if let last = model.lastUpdated {
-                    Text("Last updated: \(last.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
                 if let n = model.notice {
                     Label(n, systemImage: "info.circle")
                         .font(.footnote)
@@ -27,7 +21,13 @@ struct EventsView: View {
                     Text(err)
                         .font(.footnote)
                         .foregroundStyle(.red)
-                        .textSelection(.enabled)
+                        .accessibilityIdentifier("events.errorText")
+                }
+
+                if model.diagnostics.linksFound > 0 {
+                    Text("Diagnostics: links \(model.diagnostics.linksFound), pages \(model.diagnostics.pagesParsed), events \(model.diagnostics.eventsProduced)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -41,8 +41,13 @@ struct EventsView: View {
                             Spacer()
                         }
                     } else if model.error == nil {
-                        Text("No events found right now. Please check back soon.")
+                        Text("No events are currently published.")
                             .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("events.emptyStateText")
+                    } else {
+                        Text("Events are temporarily unavailable.")
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("events.emptyUnavailableText")
                     }
                 }
             } else {
@@ -77,17 +82,18 @@ struct EventsView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    Task { await model.refresh() }
+                    Task { await model.refresh(force: true) }
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
                 .disabled(model.isLoading)
+                .accessibilityIdentifier("events.refreshButton")
             }
         }
         .task {
             // Initial load if empty
             if model.events.isEmpty || model.lastUpdated == nil {
-                await model.refresh()
+                await model.refresh(force: true)
             }
         }
         .onAppear {

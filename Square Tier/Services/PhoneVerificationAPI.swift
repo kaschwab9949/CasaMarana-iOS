@@ -12,11 +12,9 @@ struct PhoneVerificationVerifyResponse: Codable {
 }
 
 final class PhoneVerificationAPI {
-    private func applyAuthHeaders(_ request: inout URLRequest) {
-        let key = AppConfig.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !key.isEmpty {
-            let token = key.lowercased().hasPrefix("bearer ") ? key : "Bearer \(key)"
-            request.setValue(token, forHTTPHeaderField: "Authorization")
+    private func applyAuthHeaders(_ request: inout URLRequest) throws {
+        guard CMHTTP.applyAuthHeaders(&request) else {
+            throw APIError.message("Verification service is not configured. Add an API key in Settings.")
         }
     }
 
@@ -27,28 +25,57 @@ final class PhoneVerificationAPI {
         return d
     }()
 
-    private static func responsePreview(_ data: Data, limit: Int = 300) -> String {
-        let s = String(decoding: data, as: UTF8.self)
-        return String(s.prefix(limit))
+    private func friendlyStatusMessage(statusCode: Int, data: Data, operation: String) -> String {
+        if statusCode == 429 {
+            return "Too many verification attempts. Please wait a moment and try again."
+        }
+        if statusCode == 401 || statusCode == 403 {
+            if AppConfig.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return "Verification service is not configured. Add your API key and try again."
+            }
+            return "Verification service rejected this credential. Please verify API settings."
+        }
+        if statusCode == 404 {
+            return "Verification service route is unavailable. Please verify backend URL."
+        }
+
+        if let object = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
+            let fields = ["message", "error", "detail"]
+            for field in fields {
+                if let raw = object[field] as? String {
+                    let sanitized = UserFacingError.message(
+                        for: APIError.message(raw),
+                        context: .auth,
+                        fallback: ""
+                    ).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !sanitized.isEmpty {
+                        return sanitized
+                    }
+                }
+            }
+        }
+
+        let raw = String(decoding: data, as: UTF8.self).lowercased()
+        if raw.contains("<!doctype html") || raw.contains("<html") {
+            return "Verification service returned an unexpected response. Please verify backend URL."
+        }
+
+        if statusCode == 401 || statusCode == 403 {
+            return "Verification service is unavailable right now."
+        }
+        if statusCode >= 500 {
+            return "Verification service is temporarily unavailable. Please try again."
+        }
+        return "Could not \(operation). Please check the number and try again."
     }
 
     func start(phoneE164: String) async throws -> PhoneVerificationStartResponse {
-        if AppConfig.backendBaseURL.host?.lowercased().contains("example") == true {
-            // For testing UI without a backend, fake a success response after 1s
-            try await Task.sleep(nanoseconds: 1_000_000_000)
-            return PhoneVerificationStartResponse(requestId: UUID().uuidString)
-        }
-
-        let url = AppConfig.backendBaseURL
-            .appendingPathComponent("api")
-            .appendingPathComponent("auth")
-            .appendingPathComponent("phone")
-            .appendingPathComponent("start")
+        let url = BackendRoute.url(for: BackendRoute.phoneStart)
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        applyAuthHeaders(&request)
+        try applyAuthHeaders(&request)
 
         let body: [String: Any] = ["phone": phoneE164]
         request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
@@ -57,17 +84,12 @@ final class PhoneVerificationAPI {
         guard let http = response as? HTTPURLResponse else { throw APIError.message("No HTTP response") }
 
         guard (200..<300).contains(http.statusCode) else {
-            let text = String(data: data, encoding: .utf8) ?? ""
-            if !text.isEmpty {
-                throw APIError.message("HTTP \(http.statusCode) from \(url.absoluteString): \(text)")
-            }
-            throw APIError.message("HTTP \(http.statusCode) from \(url.absoluteString)")
+            throw APIError.message(friendlyStatusMessage(statusCode: http.statusCode, data: data, operation: "send verification code"))
         }
 
         let contentType = (http.value(forHTTPHeaderField: "Content-Type") ?? "").lowercased()
         if contentType.contains("text/html") {
-            let preview = Self.responsePreview(data)
-            throw APIError.message("Expected JSON but received HTML. Ensure backend is running and not returning an error page. Body: \(preview)")
+            throw APIError.message("Verification service is unavailable right now. Please try again.")
         }
 
         do {
@@ -75,32 +97,17 @@ final class PhoneVerificationAPI {
             decoder.dateDecodingStrategy = .formatted(Self.isoFormatter)
             return try decoder.decode(PhoneVerificationStartResponse.self, from: data)
         } catch {
-            let preview = Self.responsePreview(data)
-            throw APIError.message("Could not decode phone verification response. Body: \(preview)")
+            throw APIError.message("Verification service returned an unexpected response. Please try again.")
         }
     }
 
     func verify(phoneE164: String, code: String, requestId: String) async throws -> PhoneVerificationVerifyResponse {
-        if AppConfig.backendBaseURL.host?.lowercased().contains("example") == true {
-            // Fake verify
-            try await Task.sleep(nanoseconds: 1_000_000_000)
-            if code == "123456" {
-                return PhoneVerificationVerifyResponse(verified: true, token: "fake_token_\(UUID().uuidString)")
-            } else {
-                throw APIError.message("Invalid code (for testing without backend, use 123456).")
-            }
-        }
-
-        let url = AppConfig.backendBaseURL
-            .appendingPathComponent("api")
-            .appendingPathComponent("auth")
-            .appendingPathComponent("phone")
-            .appendingPathComponent("verify")
+        let url = BackendRoute.url(for: BackendRoute.phoneVerify)
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        applyAuthHeaders(&request)
+        try applyAuthHeaders(&request)
 
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "phone": phoneE164,
@@ -112,11 +119,7 @@ final class PhoneVerificationAPI {
         guard let http = response as? HTTPURLResponse else { throw APIError.message("No HTTP response") }
 
         guard (200..<300).contains(http.statusCode) else {
-            let text = String(data: data, encoding: .utf8) ?? ""
-            if !text.isEmpty {
-                throw APIError.message("HTTP \(http.statusCode) from \(url.absoluteString): \(text)")
-            }
-            throw APIError.message("HTTP \(http.statusCode) from \(url.absoluteString)")
+            throw APIError.message(friendlyStatusMessage(statusCode: http.statusCode, data: data, operation: "verify your code"))
         }
 
         do {
@@ -124,8 +127,7 @@ final class PhoneVerificationAPI {
             decoder.dateDecodingStrategy = .formatted(Self.isoFormatter)
             return try decoder.decode(PhoneVerificationVerifyResponse.self, from: data)
         } catch {
-            let preview = Self.responsePreview(data)
-            throw APIError.message("Could not decode phone verification response. Body: \(preview)")
+            throw APIError.message("Verification service returned an unexpected response. Please try again.")
         }
     }
 

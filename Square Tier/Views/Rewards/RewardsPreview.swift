@@ -5,7 +5,7 @@ struct RewardsRootView: View {
 
     var body: some View {
         if session.isUnlocked {
-            // If the phone is verified, load real rewards. Otherwise show a preview that still demonstrates app functionality.
+            // If the phone is verified, load live loyalty status.
             if session.verifiedPhoneE164 != nil {
                 RewardsWalletView()
             } else {
@@ -43,10 +43,10 @@ struct RewardsPreviewView: View {
     var body: some View {
         List {
             Section {
-                Text("Activate Rewards")
+                Text("Loyalty Enrollment Required")
                     .font(.headline)
                 
-                Text("You've created a local profile. To start earning points and access rewards, please verify your phone number so we can link your Square customer profile.")
+                Text("Use your verified phone to connect your loyalty account, then sign in to view points, tier status, and available rewards in the app.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -72,7 +72,11 @@ struct RewardsPreviewView: View {
             }
             
             Section {
-                Label("Apple Wallet pass is available after phone verification", systemImage: "wallet.pass")
+                Label("Wallet pass includes business, points, membership date, name, and phone.", systemImage: "wallet.pass")
+                    .foregroundStyle(.secondary)
+                    .font(.footnote)
+
+                Text("Adding loyalty passes is only available on iOS devices.")
                     .foregroundStyle(.secondary)
                     .font(.footnote)
             }

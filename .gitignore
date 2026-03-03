@@ -2,3 +2,11 @@
 *.xcuserstate
 **/xcuserdata/
 **/xcdebugger/
+
+# Local-only runtime config and secrets
+.env
+.env.*
+*.local.xcconfig
+Local.xcconfig
+Secrets.xcconfig
+Config/Secrets.*.xcconfig

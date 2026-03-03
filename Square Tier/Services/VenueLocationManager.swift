@@ -2,6 +2,17 @@ import Foundation
 import CoreLocation
 import Combine
 
+struct VenueLocationSample {
+    let lat: Double
+    let lon: Double
+    let accuracy: Double
+    let timestamp: TimeInterval
+
+    var capturedAt: Date {
+        Date(timeIntervalSince1970: timestamp)
+    }
+}
+
 // MARK: - Location (Smart Check-In)
 @MainActor
 final class VenueLocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
@@ -15,7 +26,7 @@ final class VenueLocationManager: NSObject, ObservableObject, CLLocationManagerD
     @Published var configurationError: String? = nil
     
     @Published var lastLocationSampledAt: Date? = nil
-    private let lastSampleKey = "cm.lastLocationSample.v1"
+    @Published var latestSample: VenueLocationSample? = nil
 
     private var hasWhenInUseUsageDescription: Bool {
         guard let s = Bundle.main.object(forInfoDictionaryKey: "NSLocationWhenInUseUsageDescription") as? String else {
@@ -24,32 +35,29 @@ final class VenueLocationManager: NSObject, ObservableObject, CLLocationManagerD
         return !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private var hasAlwaysUsageDescription: Bool {
-        guard let s = Bundle.main.object(forInfoDictionaryKey: "NSLocationAlwaysAndWhenInUseUsageDescription") as? String else {
-            return false
-        }
-        return !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
     override init() {
         super.init()
         manager.delegate = self
-        // Max accuracy (highest battery use). Delivers the most precise updates Core Location can provide.
-        manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+        // Foreground check-in does not need navigation-grade precision.
+        manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
         // Only wake us if the user moves > 50 meters
         manager.distanceFilter = 50
         
         self.authorization = manager.authorizationStatus
+
+        // Clear any legacy on-device location persistence keys.
+        UserDefaults.standard.removeObject(forKey: "cm.lastLocationSample.v1")
+        UserDefaults.standard.removeObject(forKey: "cm.locationLog.v1")
+        UserDefaults.standard.removeObject(forKey: "cm.lastLocationSample.lastPostedTs.v1")
     }
 
     private func retainSample(_ loc: CLLocation) {
-        let payload: [String: Any] = [
-            "lat": loc.coordinate.latitude,
-            "lon": loc.coordinate.longitude,
-            "accuracy": loc.horizontalAccuracy,
-            "timestamp": loc.timestamp.timeIntervalSince1970
-        ]
-        UserDefaults.standard.set(payload, forKey: lastSampleKey)
+        latestSample = VenueLocationSample(
+            lat: loc.coordinate.latitude,
+            lon: loc.coordinate.longitude,
+            accuracy: loc.horizontalAccuracy,
+            timestamp: loc.timestamp.timeIntervalSince1970
+        )
         lastLocationSampledAt = Date()
     }
 
@@ -73,13 +81,8 @@ final class VenueLocationManager: NSObject, ObservableObject, CLLocationManagerD
         }
 
         if status == .authorizedAlways || status == .authorizedWhenInUse {
-            if status == .authorizedAlways {
-                manager.allowsBackgroundLocationUpdates = true
-                manager.showsBackgroundLocationIndicator = true
-            } else {
-                manager.allowsBackgroundLocationUpdates = false
-                manager.showsBackgroundLocationIndicator = false
-            }
+            manager.allowsBackgroundLocationUpdates = false
+            manager.showsBackgroundLocationIndicator = false
             manager.startUpdatingLocation()
             return
         }
@@ -94,14 +97,6 @@ final class VenueLocationManager: NSObject, ObservableObject, CLLocationManagerD
         // Keep this off unless actively tracking with Always permission.
         manager.allowsBackgroundLocationUpdates = false
         manager.showsBackgroundLocationIndicator = false
-    }
-
-    func requestAlways() {
-        guard hasAlwaysUsageDescription else {
-            configurationError = "Missing NSLocationAlwaysAndWhenInUseUsageDescription in Info.plist. Cannot request Always auth."
-            return
-        }
-        manager.requestAlwaysAuthorization()
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {

@@ -13,7 +13,7 @@ final class Casa_MaranaUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments += ["-ui-testing-reset-session", "-ui-testing-selected-tab", "rewards"]
+        app.launchArguments += ["-ui-testing-reset-session", "-ui-testing-selected-tab", "rewards", "-ui-testing-seed-demo-account"]
 
         addUIInterruptionMonitor(withDescription: "System Alerts") { alert in
             let preferredButtons = ["Allow While Using App", "Allow Once", "OK", "Don’t Allow", "Don't Allow"]
@@ -57,10 +57,16 @@ final class Casa_MaranaUITests: XCTestCase {
         selectTab(named: "Menu")
         XCTAssertTrue(element(withID: "screen.menu").waitForExistence(timeout: 5), "Menu screen did not appear after selecting Menu tab.")
 
+        let foodSegment = app.buttons["Food"]
+        let drinksSegment = app.buttons["Drinks"]
+        XCTAssertTrue(foodSegment.waitForExistence(timeout: 5), "Food section control should be visible.")
+        XCTAssertTrue(drinksSegment.waitForExistence(timeout: 5), "Drinks section control should be visible.")
+        drinksSegment.tap()
+
         let searchField = app.searchFields["Search pizzas, drinks, etc."]
         XCTAssertTrue(searchField.waitForExistence(timeout: 5))
-        clearAndType(text: "Margherita", into: searchField)
-        XCTAssertTrue(app.staticTexts["Margherita"].waitForExistence(timeout: 5))
+        clearAndType(text: "Titos", into: searchField)
+        XCTAssertTrue(app.staticTexts["Titos Vodka"].waitForExistence(timeout: 5))
 
         dismissKeyboardIfVisible()
         selectTab(named: "Home")
@@ -125,12 +131,20 @@ final class Casa_MaranaUITests: XCTestCase {
 
         selectTab(named: "Play Snake")
         XCTAssertTrue(element(withID: "screen.snake").waitForExistence(timeout: 5), "Snake screen did not appear after selecting overflow tab.")
+        XCTAssertTrue(element(withID: "snake.control.up").waitForExistence(timeout: 5), "Snake up control button should be visible.")
+        XCTAssertTrue(element(withID: "snake.control.left").waitForExistence(timeout: 5), "Snake left control button should be visible.")
+        XCTAssertTrue(element(withID: "snake.control.right").waitForExistence(timeout: 5), "Snake right control button should be visible.")
+        XCTAssertTrue(element(withID: "snake.control.down").waitForExistence(timeout: 5), "Snake down control button should be visible.")
+        XCTAssertTrue(element(withID: "snake.leaderboard.section").waitForExistence(timeout: 5), "Snake leaderboard section should be visible.")
 
         selectTab(named: "Settings")
         XCTAssertTrue(element(withID: "screen.settings").waitForExistence(timeout: 5), "Settings screen did not appear after selecting overflow tab.")
 
         let eraseButton = app.buttons["settings.eraseLocalProfileButton"]
-        XCTAssertTrue(eraseButton.waitForExistence(timeout: 5), "Erase Local Profile button should exist after sign-in.")
+        XCTAssertTrue(
+            waitForElementByScrollingToVisible(eraseButton, timeout: 8),
+            "Erase Local Profile button should exist after sign-in."
+        )
 
         eraseButton.tap()
         let cancelButton = app.buttons.matching(identifier: "settings.eraseCancelButton").firstMatch
@@ -198,8 +212,8 @@ final class Casa_MaranaUITests: XCTestCase {
     private func assertRewardsRefreshOutcomeAppeared() {
         let errorText = element(withID: "rewards.wallet.errorText")
         let addToWalletButton = app.buttons["rewards.wallet.addToWalletButton"]
-        let notEnrolledText = app.staticTexts["Phone number is not enrolled in rewards yet."]
-        let noDataText = app.staticTexts["No rewards data loaded yet."]
+        let notEnrolledText = element(withID: "rewards.wallet.notEnrolledText")
+        let noDataText = element(withID: "rewards.wallet.noDataText")
 
         let deadline = Date().addingTimeInterval(8)
         while Date() < deadline {
@@ -210,6 +224,28 @@ final class Casa_MaranaUITests: XCTestCase {
         }
 
         XCTFail("No rewards refresh outcome surfaced (expected error text or wallet/enrollment state).")
+    }
+
+    private func waitForElementByScrollingToVisible(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        let tablesQuery = app.tables
+        let firstTable = tablesQuery.firstMatch
+
+        while Date() < deadline {
+            if element.exists {
+                return true
+            }
+
+            if firstTable.exists {
+                firstTable.swipeUp()
+            } else {
+                app.swipeUp()
+            }
+
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+
+        return element.exists
     }
 
     private func element(withID identifier: String) -> XCUIElement {

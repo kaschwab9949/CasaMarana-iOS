@@ -1,93 +1,187 @@
 import SwiftUI
 import Combine
 
-enum MenuCategory: String, CaseIterable, Identifiable {
-    var id: String { rawValue }
-    
-    case shareables = "Shareables"
-    case neapolitanPizza = "Neapolitan Pizza"
-    case signatureCocktails = "Signature Cocktails"
-    case draftBeer = "Draft Beer"
-    case wine = "Wine"
-}
-
 struct MenuItem: Identifiable {
-    let id = UUID()
+    let id: String
     let name: String
     let description: String
     let price: String
-    let category: MenuCategory
+    let category: String
     let tags: [String]
+    let sectionHint: String?
+
+    init(
+        id: String,
+        name: String,
+        description: String,
+        price: String,
+        category: String,
+        tags: [String],
+        sectionHint: String? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.description = description
+        self.price = price
+        self.category = category
+        self.tags = tags
+        self.sectionHint = sectionHint
+    }
 }
 
+@MainActor
 final class MenuData: ObservableObject {
-    @Published var allItems: [MenuItem] = [
-        // Shareables
-        MenuItem(name: "Pretzel Bites", description: "Warm pretzel pieces served with house-made beer cheese and spicy mustard.", price: "$10", category: .shareables, tags: ["vegetarian", "cheese", "snack"]),
-        MenuItem(name: "Caprese Skewers", description: "Cherry tomatoes, fresh mozzarella balls, and basil drizzled with balsamic glaze.", price: "$12", category: .shareables, tags: ["vegetarian", "fresh", "gluten-free"]),
-        MenuItem(name: "Garlic Knots", description: "Oven-baked dough knots tossed in garlic butter and parmesan.", price: "$8", category: .shareables, tags: ["vegetarian", "garlic", "bread"]),
-        
-        // Neapolitan Pizza
-        MenuItem(name: "Margherita", description: "San Marzano tomato sauce, fresh mozzarella, basil, and a drizzle of extra virgin olive oil.", price: "$16", category: .neapolitanPizza, tags: ["classic", "vegetarian", "pizza"]),
-        MenuItem(name: "Spicy Soppressata", description: "Tomato base, mozzarella, spicy soppressata, hot honey drizzle, and fresh basil.", price: "$18", category: .neapolitanPizza, tags: ["spicy", "meat", "pizza"]),
-        MenuItem(name: "Truffle Mushroom", description: "White base, roasted wild mushrooms, mozzarella, truffle oil, and thyme.", price: "$19", category: .neapolitanPizza, tags: ["truffle", "vegetarian", "pizza"]),
-        MenuItem(name: "Prosciutto & Arugula", description: "Mozzarella base, baked then topped with fresh arugula, prosciutto, and shaved parmesan.", price: "$20", category: .neapolitanPizza, tags: ["meat", "greens", "pizza"]),
-        
-        // Signature Cocktails
-        MenuItem(name: "Marana Mule", description: "Vodka, fresh lime juice, ginger beer, splash of prickly pear syrup.", price: "$12", category: .signatureCocktails, tags: ["fruity", "refreshing", "cocktail"]),
-        MenuItem(name: "Smoked Old Fashioned", description: "Bourbon, simple syrup, Angostura bitters, smoked with cherry wood.", price: "$14", category: .signatureCocktails, tags: ["strong", "smoky", "cocktail"]),
-        MenuItem(name: "Desert Paloma", description: "Tequila, grapefruit soda, lime, tajin rim.", price: "$11", category: .signatureCocktails, tags: ["citrus", "tequila", "refreshing"]),
-        
-        // Draft Beer (Rotating Examples)
-        MenuItem(name: "Dragoon IPA", description: "Strong, heavily-hopped West Coast style IPA from Tucson, AZ. (7.3% ABV)", price: "$7", category: .draftBeer, tags: ["ipa", "hoppy", "local"]),
-        MenuItem(name: "Huss Scottsdale Blonde", description: "Smooth, slightly sweet blonde ale. (4.7% ABV)", price: "$7", category: .draftBeer, tags: ["blonde", "light", "local"]),
-        MenuItem(name: "Pueblo Vida Hefeweizen", description: "Bavarian-style wheat beer with notes of banana and clove. (5.2% ABV)", price: "$8", category: .draftBeer, tags: ["wheat", "german-style", "local"]),
-        
-        // Wine
-        MenuItem(name: "House Cabernet Sauvignon", description: "California - Rich and full-bodied with notes of dark blackberry.", price: "$9/gl", category: .wine, tags: ["red", "full-bodied"]),
-        MenuItem(name: "House Pinot Grigio", description: "Italy - Crisp and refreshing with hints of green apple.", price: "$9/gl", category: .wine, tags: ["white", "crisp"]),
-        MenuItem(name: "Rosé", description: "France - Dry, notes of strawberry and watermelon.", price: "$10/gl", category: .wine, tags: ["rose", "dry"])
-    ]
+    enum DataSource {
+        case square
+        case seed
+    }
+
+    @Published var allItems: [MenuItem] = SquareMenuSeed.items
+    @Published var isLoading = false
+    @Published var notice: String? = nil
+    @Published var errorText: String? = nil
+    @Published var dataSource: DataSource = .seed
+
+    private let api = SquareMenuAPI()
+
+    init() {
+        notice = seedNotice
+    }
+
+    private var seedNotice: String {
+        "Showing fallback menu snapshot (\(SquareMenuSeed.generatedAtDisplay))."
+    }
+
+    func refresh() async {
+        guard !isLoading else { return }
+        isLoading = true
+        errorText = nil
+
+        do {
+            let remoteItems = try await api.fetchMenu()
+            if !remoteItems.isEmpty {
+                allItems = remoteItems
+                notice = "Menu updated from Square."
+                dataSource = .square
+            } else {
+                notice = "Square returned no menu items. Showing fallback menu snapshot."
+                dataSource = .seed
+            }
+            isLoading = false
+        } catch {
+            errorText = UserFacingError.message(
+                for: error,
+                context: .generic,
+                fallback: "Could not refresh menu right now."
+            )
+            notice = dataSource == .square ? "Showing last successful menu update." : seedNotice
+            isLoading = false
+        }
+    }
 }
 
 struct MenuView: View {
     @StateObject private var menuData = MenuData()
     @State private var searchText = ""
-    
-    // Derived property to filter items based on search text
-    private var filteredItems: [MenuItem] {
-        if searchText.isEmpty {
+    @State private var selectedSection: MenuSection = .food
+    @State private var searchAllSections = false
+
+    private var sectionScopedItems: [MenuItem] {
+        if searchAllSections {
             return menuData.allItems
-        } else {
-            return menuData.allItems.filter { item in
-                item.name.localizedCaseInsensitiveContains(searchText) ||
-                item.description.localizedCaseInsensitiveContains(searchText) ||
-                item.tags.contains { $0.localizedCaseInsensitiveContains(searchText) }
-            }
+        }
+        return menuData.allItems.filter { MenuCategoryMapping.classify($0) == selectedSection }
+    }
+
+    private var filteredItems: [MenuItem] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return sectionScopedItems }
+        return sectionScopedItems.filter { item in
+            item.name.localizedCaseInsensitiveContains(query) ||
+            item.category.localizedCaseInsensitiveContains(query) ||
+            item.description.localizedCaseInsensitiveContains(query) ||
+            item.tags.contains { $0.localizedCaseInsensitiveContains(query) }
         }
     }
-    
-    // Group filtered items by category for sections
-    private func items(in category: MenuCategory) -> [MenuItem] {
-        filteredItems.filter { $0.category == category }
+
+    private var visibleCategories: [String] {
+        let effectiveSection: MenuSection = searchAllSections ? .other : selectedSection
+        return MenuCategoryMapping.orderedCategories(in: effectiveSection, items: filteredItems)
+    }
+
+    private func items(in category: String) -> [MenuItem] {
+        filteredItems
+            .filter { $0.category == category }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    private var showsOperationalFoodEmptyState: Bool {
+        !menuData.isLoading
+            && !searchAllSections
+            && selectedSection == .food
+            && searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && filteredItems.isEmpty
     }
 
     var body: some View {
         List {
-            // Check if there are results
-            if filteredItems.isEmpty {
+            Section {
+                Picker("Menu Section", selection: $selectedSection) {
+                    Text(MenuSection.food.title).tag(MenuSection.food)
+                    Text(MenuSection.drinks.title).tag(MenuSection.drinks)
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("menu.sectionPicker")
+
+                Toggle("Search all sections", isOn: $searchAllSections)
+                    .font(.footnote)
+                    .accessibilityIdentifier("menu.allSectionsToggle")
+
+                if menuData.isLoading {
+                    HStack {
+                        ProgressView()
+                        Text("Refreshing menu…")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityIdentifier("menu.loadingText")
+                }
+
+                if let errorText = menuData.errorText {
+                    Text(errorText)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .accessibilityIdentifier("menu.errorText")
+                }
+
+                if let notice = menuData.notice {
+                    Text(notice)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("menu.noticeText")
+                }
+            }
+
+            if showsOperationalFoodEmptyState {
                 Section {
-                    Text("No results found for \"\(searchText)\".")
+                    Text("No Food items are currently published in the live menu. Verify category mapping in Square and pull to refresh.")
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 8)
+                        .accessibilityIdentifier("menu.foodEmptyOperationalText")
+                }
+            } else if filteredItems.isEmpty {
+                Section {
+                    Text("No menu results found for \"\(searchText)\".")
                         .foregroundStyle(.secondary)
                         .padding(.vertical, 8)
                         .accessibilityIdentifier("menu.noResultsText")
                 }
             } else {
-                ForEach(MenuCategory.allCases) { category in
+                ForEach(visibleCategories, id: \.self) { category in
                     let categoryItems = items(in: category)
                     
                     if !categoryItems.isEmpty {
-                        Section(header: Text(category.rawValue)) {
+                        Section(header: Text(category)) {
                             ForEach(categoryItems) { item in
                                 VStack(alignment: .leading, spacing: 6) {
                                     HStack(alignment: .top) {
@@ -98,10 +192,12 @@ struct MenuView: View {
                                             .font(.subheadline)
                                             .bold()
                                     }
-                                    
-                                    Text(item.description)
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
+
+                                    if !item.description.isEmpty {
+                                        Text(item.description)
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
                                 .padding(.vertical, 4)
                             }
@@ -111,7 +207,21 @@ struct MenuView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .accessibilityIdentifier("menu.list")
+        .accessibilityIdentifier("screen.menu")
         .searchable(text: $searchText, prompt: "Search pizzas, drinks, etc.")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    Task { await menuData.refresh() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .disabled(menuData.isLoading)
+                .accessibilityIdentifier("menu.refreshButton")
+            }
+        }
+        .task {
+            await menuData.refresh()
+        }
     }
 }

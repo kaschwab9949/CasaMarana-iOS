@@ -31,7 +31,7 @@ final class Casa_MaranaTests: XCTestCase {
         let original = UserProfile(
             fullName: "Test Member",
             phoneE164: "+15205551234",
-            email: "member@example.com",
+            email: "member@casamarana.com",
             birthday: "1990-01-01",
             isPhoneVerified: true,
             phoneVerificationToken: "token_abc"
@@ -59,5 +59,69 @@ final class Casa_MaranaTests: XCTestCase {
         let blackCard = MembershipTier.tier(for: 20_000)
         XCTAssertEqual(blackCard.level, 5)
         XCTAssertNil(MembershipTier.nextTier(after: blackCard.level))
+    }
+
+    func testSnakeBoardMetricsGuardsInvalidContainerDimensions() {
+        let invalid = SnakeGameView.resolvedBoardMetrics(
+            containerSize: CGSize(width: CGFloat.infinity, height: -CGFloat.infinity),
+            cols: 20
+        )
+
+        XCTAssertTrue(invalid.boardSide.isFinite)
+        XCTAssertTrue(invalid.cellSize.isFinite)
+        XCTAssertGreaterThan(invalid.boardSide, 0)
+        XCTAssertGreaterThan(invalid.cellSize, 0)
+    }
+
+    func testSnakeBoardMetricsGuardsNaNAndZeroColumns() {
+        let metrics = SnakeGameView.resolvedBoardMetrics(
+            containerSize: CGSize(width: CGFloat.nan, height: 300),
+            cols: 0
+        )
+
+        XCTAssertTrue(metrics.boardSide.isFinite)
+        XCTAssertTrue(metrics.cellSize.isFinite)
+        XCTAssertGreaterThan(metrics.boardSide, 0)
+        XCTAssertGreaterThan(metrics.cellSize, 0)
+    }
+
+    func testSnakeBoardMetricsKeepsPlayableBoardSizeOnPhoneWidth() {
+        let metrics = SnakeGameView.resolvedBoardMetrics(
+            containerSize: CGSize(width: 390, height: 470),
+            cols: 20
+        )
+
+        XCTAssertGreaterThanOrEqual(metrics.boardSide, 290)
+        XCTAssertGreaterThan(metrics.cellSize, 10)
+    }
+
+    func testMenuCategoryMappingClassifiesDrinksFromCategory() {
+        let item = MenuItem(
+            id: "1",
+            name: "House Margarita",
+            description: "",
+            price: "$10.00",
+            category: "Mixed Drinks",
+            tags: ["cocktail"]
+        )
+        XCTAssertEqual(MenuCategoryMapping.classify(item), .drinks)
+    }
+
+    func testMenuCategoryMappingClassifiesFoodFromKeywords() {
+        let item = MenuItem(
+            id: "2",
+            name: "Chicken Wings",
+            description: "",
+            price: "$12.00",
+            category: "Specials",
+            tags: ["shareable"]
+        )
+        XCTAssertEqual(MenuCategoryMapping.classify(item), .food)
+    }
+
+    func testBackendRouteCandidateOrderIsCanonicalFirst() {
+        XCTAssertEqual(BackendRoute.smartCheckInCandidates.first, BackendRoute.smartCheckInCanonical)
+        XCTAssertEqual(BackendRoute.accountDeleteCandidates.first, BackendRoute.accountDeleteCanonical)
+        XCTAssertEqual(BackendRoute.menuCandidates.first, BackendRoute.menuCanonical)
     }
 }

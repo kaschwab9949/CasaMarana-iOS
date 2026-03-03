@@ -4,7 +4,7 @@ struct ProfileView: View {
     @EnvironmentObject var session: AppSession
     @State private var draft: UserProfile = .empty
     @State private var savedToast: Bool = false
-    @State private var phoneError: String? = nil
+    @State private var formError: String? = nil
 
     var body: some View {
         List {
@@ -32,7 +32,7 @@ struct ProfileView: View {
 
             Section {
                 Button {
-                    phoneError = nil
+                    formError = nil
 
                     // US-only: allow customers to type 10 digits (e.g. 5555555555) and normalize to +1…
                     if !session.profile.isPhoneVerified {
@@ -44,10 +44,28 @@ struct ProfileView: View {
                         } else if digits.isEmpty {
                             // allowed if not verified
                         } else {
-                            phoneError = "Please enter a valid 10-digit US phone number."
+                            formError = "Please enter a valid 10-digit US phone number."
                             return
                         }
                     }
+
+                    guard draft.fullName.trimmingCharacters(in: .whitespacesAndNewlines).count <= 300 else {
+                        formError = "Full name must be 300 characters or fewer."
+                        return
+                    }
+
+                    guard isValidCustomerEmail(draft.email) else {
+                        formError = "Please enter a valid email address."
+                        return
+                    }
+
+                    guard let normalizedBirthday = normalizeCustomerBirthday(draft.birthday) else {
+                        formError = "Birthday must use YYYY-MM-DD or MM-DD format."
+                        return
+                    }
+
+                    draft.email = normalizeCustomerEmail(draft.email)
+                    draft.birthday = normalizedBirthday
 
                     session.updateProfile(draft)
                     savedToast = true
@@ -70,7 +88,7 @@ struct ProfileView: View {
                 }
             }
 
-            if let err = phoneError {
+            if let err = formError {
                 Section {
                     Text(err)
                         .font(.footnote)

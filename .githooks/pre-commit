@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v rg >/dev/null 2>&1; then
+  echo "pre-commit: ripgrep (rg) is required for secret scanning." >&2
+  exit 1
+fi
+
+diff_content="$(git diff --cached --no-color)"
+if [[ -z "${diff_content}" ]]; then
+  exit 0
+fi
+
+secret_pattern='(EAAA[A-Za-z0-9_-]{10,}|sq0idp-[A-Za-z0-9-]{8,}|vcp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|casamarana_verify_[A-Za-z0-9_]+)'
+
+if printf '%s' "${diff_content}" | rg -n "${secret_pattern}" >/dev/null; then
+  echo "pre-commit: potential secret detected in staged changes." >&2
+  echo "Remove tokens/keys before committing." >&2
+  exit 1
+fi
+
+exit 0
