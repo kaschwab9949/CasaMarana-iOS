@@ -12,9 +12,6 @@ public enum AppConfig {
     }
 
     private static let defaultBackendBaseURL = URL(string: "https://casa-marana-backend.vercel.app")!
-    private static let runtimeBackendBaseURLKey = "cm.runtime.backendBaseURL"
-    private static let runtimeAuthHeaderModeKey = "cm.runtime.authHeaderMode"
-    private static let runtimeAPIKeyAccount = "cm.runtime.apiKey"
 
     private static func plistString(_ key: String) -> String? {
         guard let raw = Bundle.main.object(forInfoDictionaryKey: key) as? String else {
@@ -70,51 +67,9 @@ public enum AppConfig {
         }
     }
 
-    public static var runtimeBackendBaseURLOverride: String? {
-#if DEBUG
-        guard let raw = UserDefaults.standard.string(forKey: runtimeBackendBaseURLKey) else {
-            return nil
-        }
-        return raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : raw
-#else
-        return nil
-#endif
-    }
-
-    public static var runtimeAuthHeaderModeOverride: AuthHeaderMode? {
-#if DEBUG
-        parseAuthHeaderMode(UserDefaults.standard.string(forKey: runtimeAuthHeaderModeKey))
-#else
-        return nil
-#endif
-    }
-
-    public static var runtimeAPIKeyOverride: String? {
-#if DEBUG
-        normalizedKey(KeychainService.load(account: runtimeAPIKeyAccount))
-#else
-        return nil
-#endif
-    }
-
-    public static var hasRuntimeAPIKeyOverride: Bool {
-#if DEBUG
-        normalizedKey(KeychainService.load(account: runtimeAPIKeyAccount)) != nil
-#else
-        return false
-#endif
-    }
-
-    public static var hasRuntimeOverrides: Bool {
-        runtimeBackendBaseURLOverride != nil || runtimeAuthHeaderModeOverride != nil || hasRuntimeAPIKeyOverride
-    }
-
     // Base URL of your backend.
     // Falls back to production backend if config values are missing.
     public static var backendBaseURL: URL {
-        if let runtimeURL = normalizedURL(from: runtimeBackendBaseURLOverride) {
-            return runtimeURL
-        }
         if let plistURL = normalizedURL(from: plistString("CMBackendBaseURL")) {
             return plistURL
         }
@@ -123,9 +78,6 @@ public enum AppConfig {
 
     // API key header value for your backend. Must match backend expectation if configured.
     public static var apiKey: String {
-        if let runtimeAPIKeyOverride {
-            return runtimeAPIKeyOverride
-        }
         return bundledAPIKey
     }
 
@@ -136,7 +88,7 @@ public enum AppConfig {
     public static var apiKeyCandidates: [String] {
         var seen = Set<String>()
         var candidates: [String] = []
-        let rawCandidates: [String] = [apiKey, runtimeAPIKeyOverride ?? "", bundledAPIKey]
+        let rawCandidates: [String] = [apiKey, bundledAPIKey]
         for raw in rawCandidates {
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { continue }
@@ -148,9 +100,6 @@ public enum AppConfig {
     }
 
     public static var authHeaderMode: AuthHeaderMode {
-        if let runtime = runtimeAuthHeaderModeOverride {
-            return runtime
-        }
         return parseAuthHeaderMode(plistString("CMAPIAuthMode")) ?? .apiKey
     }
 
@@ -160,34 +109,6 @@ public enum AppConfig {
             modes.append(mode)
         }
         return modes
-    }
-
-    @discardableResult
-    public static func saveRuntimeOverrides(
-        baseURL: String?,
-        apiKey: String?,
-        authHeaderMode: AuthHeaderMode
-    ) -> Bool {
-        if let url = normalizedKey(baseURL) {
-            UserDefaults.standard.set(url, forKey: runtimeBackendBaseURLKey)
-        } else {
-            UserDefaults.standard.removeObject(forKey: runtimeBackendBaseURLKey)
-        }
-
-        UserDefaults.standard.set(authHeaderMode.rawValue, forKey: runtimeAuthHeaderModeKey)
-
-        if let key = normalizedKey(apiKey) {
-            return KeychainService.save(key, account: runtimeAPIKeyAccount)
-        } else {
-            KeychainService.delete(account: runtimeAPIKeyAccount)
-            return true
-        }
-    }
-
-    public static func clearRuntimeOverrides() {
-        UserDefaults.standard.removeObject(forKey: runtimeBackendBaseURLKey)
-        UserDefaults.standard.removeObject(forKey: runtimeAuthHeaderModeKey)
-        KeychainService.delete(account: runtimeAPIKeyAccount)
     }
 
 }
