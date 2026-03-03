@@ -125,6 +125,20 @@ struct RewardsWalletView: View {
         return best?.name ?? "Member"
     }
 
+    private var rewardsLoadBanner: (text: String, color: Color)? {
+        if isLoading {
+            return ("Loading Square rewards...", .secondary)
+        }
+        if errorText != nil {
+            return ("Square rewards are temporarily unavailable. Tap Refresh to try again.", .red)
+        }
+        guard let status else { return nil }
+        if status.enrolled {
+            return ("Loaded enrolled Square rewards account.", .green)
+        }
+        return ("Loaded account. This phone is not enrolled in Square Loyalty yet.", .secondary)
+    }
+
     private func rewardsForTier(_ tier: RewardTier) -> [String] {
         if let match = MembershipTier.all.first(where: { $0.name.caseInsensitiveCompare(tier.name) == .orderedSame }) {
             return match.benefits
@@ -413,6 +427,17 @@ struct RewardsWalletView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("rewards.wallet.lookupPhoneText")
+
+                if let banner = rewardsLoadBanner {
+                    Text(banner.text)
+                        .font(.footnote)
+                        .foregroundStyle(banner.color)
+                        .accessibilityIdentifier("rewards.wallet.loadStateText")
+                }
+
+                Text("Points, balance, and loyalty status are pulled directly from Square using this verified phone.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
 
                 if let err = errorText {
                     Text(err)

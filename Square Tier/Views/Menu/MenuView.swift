@@ -49,7 +49,7 @@ final class MenuData: ObservableObject {
     }
 
     private var seedNotice: String {
-        "Showing fallback menu snapshot (\(SquareMenuSeed.generatedAtDisplay))."
+        "Showing available menu items."
     }
 
     func refresh() async {
@@ -61,10 +61,10 @@ final class MenuData: ObservableObject {
             let remoteItems = try await api.fetchMenu()
             if !remoteItems.isEmpty {
                 allItems = remoteItems
-                notice = "Menu updated from Square."
+                notice = nil
                 dataSource = .square
             } else {
-                notice = "Square returned no menu items. Showing fallback menu snapshot."
+                notice = "Menu is temporarily unavailable. Showing available menu items."
                 dataSource = .seed
             }
             isLoading = false
@@ -74,7 +74,7 @@ final class MenuData: ObservableObject {
                 context: .generic,
                 fallback: "Could not refresh menu right now."
             )
-            notice = dataSource == .square ? "Showing last successful menu update." : seedNotice
+            notice = dataSource == .square ? "Showing the last available menu." : seedNotice
             isLoading = false
         }
     }

@@ -171,6 +171,19 @@ final class Casa_MaranaTests: XCTestCase {
         XCTAssertEqual(MenuCategoryMapping.classify(item), .other)
     }
 
+    func testMenuCategoryMappingOverridesConflictingFoodHintForKnownDrinkSignals() {
+        let item = MenuItem(
+            id: "7",
+            name: "Pizza Port Amigo Lager",
+            description: "",
+            price: "$4.00",
+            category: "Menu",
+            tags: ["Menu", "Package"],
+            sectionHint: "food"
+        )
+        XCTAssertEqual(MenuCategoryMapping.classify(item), .drinks)
+    }
+
     func testCMHTTPApplyAuthHeadersAPIKeyMode() {
         var request = URLRequest(url: URL(string: "https://casa-marana-backend.vercel.app")!)
         let applied = CMHTTP.applyAuthHeaders(&request, apiKey: "abc123", authHeaderMode: .apiKey)
@@ -185,6 +198,25 @@ final class Casa_MaranaTests: XCTestCase {
         XCTAssertTrue(applied)
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer token123")
         XCTAssertNil(request.value(forHTTPHeaderField: "x-api-key"))
+    }
+
+    func testLoyaltyStatusDecodesEnrollmentStatusStringShapes() throws {
+        let enrolledJSON = #"{"enrollment_status":"enrolled","points":42}"#
+        let notEnrolledJSON = #"{"status":"not_enrolled","points":"0"}"#
+
+        let enrolled = try JSONDecoder().decode(
+            LoyaltyStatusResponse.self,
+            from: Data(enrolledJSON.utf8)
+        )
+        let notEnrolled = try JSONDecoder().decode(
+            LoyaltyStatusResponse.self,
+            from: Data(notEnrolledJSON.utf8)
+        )
+
+        XCTAssertTrue(enrolled.enrolled)
+        XCTAssertEqual(enrolled.points, 42)
+        XCTAssertFalse(notEnrolled.enrolled)
+        XCTAssertEqual(notEnrolled.points, 0)
     }
 
     func testEventsExtractorAcceptsSingleQuotedHrefAndSkipsListingLinks() {

@@ -159,6 +159,10 @@ struct LoyaltyStatusResponse: Decodable {
     private enum CodingKeys: String, CodingKey {
         case enrolled
         case isEnrolled = "is_enrolled"
+        case enrollmentStatus = "enrollment_status"
+        case enrollmentStatusCamel = "enrollmentStatus"
+        case loyaltyStatus = "loyalty_status"
+        case status
         case points
         case pointsBalance = "points_balance"
         case pointBalance = "point_balance"
@@ -297,7 +301,29 @@ struct LoyaltyStatusResponse: Decodable {
             return result
         }
 
-        enrolled = decodeBool(for: .enrolled) ?? decodeBool(for: .isEnrolled) ?? false
+        func enrollmentState(from value: String?) -> Bool? {
+            guard let value else { return nil }
+            switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "1", "true", "yes", "y", "enrolled", "active", "member":
+                return true
+            case "0", "false", "no", "n", "unenrolled", "not_enrolled", "not enrolled", "inactive":
+                return false
+            default:
+                return nil
+            }
+        }
+
+        let enrollmentStateString =
+            decodeTrimmedString(for: .enrollmentStatus)
+            ?? decodeTrimmedString(for: .enrollmentStatusCamel)
+            ?? decodeTrimmedString(for: .loyaltyStatus)
+            ?? decodeTrimmedString(for: .status)
+
+        enrolled =
+            decodeBool(for: .enrolled)
+            ?? decodeBool(for: .isEnrolled)
+            ?? enrollmentState(from: enrollmentStateString)
+            ?? false
         points =
             decodeInt(for: .points)
             ?? decodeInt(for: .pointsBalance)
@@ -682,21 +708,17 @@ final class LoyaltyAPI {
             }
         }
 
-        let queryKeys = ["phone", "phone_number", "phoneE164"]
         var seen = Set<String>()
         var urls: [URL] = []
 
-        for key in queryKeys {
-            for phone in phoneCandidates {
-                let cleaned = phone.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !cleaned.isEmpty else { continue }
-                var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)
-                components?.queryItems = [URLQueryItem(name: key, value: cleaned)]
-                guard let url = components?.url else { continue }
-                let signature = "\(key)|\(cleaned)"
-                if seen.insert(signature).inserted {
-                    urls.append(url)
-                }
+        for phone in phoneCandidates {
+            let cleaned = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !cleaned.isEmpty else { continue }
+            var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)
+            components?.queryItems = [URLQueryItem(name: "phone", value: cleaned)]
+            guard let url = components?.url else { continue }
+            if seen.insert(cleaned).inserted {
+                urls.append(url)
             }
         }
 

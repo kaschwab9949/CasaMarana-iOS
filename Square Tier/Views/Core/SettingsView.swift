@@ -120,6 +120,10 @@ struct SettingsView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
+                Text("Smart Check-In lets us detect when you visit Casa Marana and awards an extra 5 loyalty points for each qualifying visit.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
                 if smartCheckInEnabled && (location.authorization == .denied || location.authorization == .restricted) {
                     Button("Open iOS Settings") {
                         openSystemSettings()
@@ -252,7 +256,7 @@ struct PrivacyDataUseView: View {
                 Text("Rewards lookup: when you check Rewards, your phone number is sent to our rewards service to retrieve your points and available rewards.")
                     .foregroundStyle(.secondary)
                 
-                Text("If you enable Smart Check-In, location samples are sent while using the app and are not retained as a local history on this device.")
+                Text("If you enable Smart Check-In, location samples are sent while using the app to award an extra 5 points per qualifying visit and are not retained as a local history on this device.")
                     .foregroundStyle(.secondary)
 
                 Text("Delete Account removes your account data from our backend and clears your profile from this device.")

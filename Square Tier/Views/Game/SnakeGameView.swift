@@ -31,7 +31,7 @@ struct SnakeGameView: View {
     @State private var isSubmittingLeaderboardScore = false
     @State private var lastSubmittedHighScore = 0
     @State private var isLeaderboardExpanded = false
-    @GestureState private var isInteractingWithBoard = false
+    @State private var isInteractingWithBoard = false
 
     private let leaderboardAPI = SnakeLeaderboardAPI()
 
@@ -111,11 +111,14 @@ struct SnakeGameView: View {
     }
 
     private var boardSwipeGesture: some Gesture {
-        DragGesture(minimumDistance: minimumSwipeDistance, coordinateSpace: .local)
-            .updating($isInteractingWithBoard) { _, state, _ in
-                state = true
+        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .onChanged { _ in
+                if !isInteractingWithBoard {
+                    isInteractingWithBoard = true
+                }
             }
             .onEnded { value in
+                isInteractingWithBoard = false
                 handleSwipe(value.translation)
             }
     }
@@ -243,7 +246,7 @@ struct SnakeGameView: View {
                 }
                 .frame(height: verticalSizeClass == .compact ? 320 : 470)
 
-                Text("Swipe on the board with one finger to move the snake.")
+                Text("Use one finger on the board to move the snake.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -369,6 +372,9 @@ struct SnakeGameView: View {
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .scrollDisabled(isInteractingWithBoard)
+        .onDisappear {
+            isInteractingWithBoard = false
+        }
         .onAppear {
             if snake.isEmpty {
                 resetGame()

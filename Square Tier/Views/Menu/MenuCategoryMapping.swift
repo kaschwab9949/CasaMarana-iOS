@@ -83,10 +83,35 @@ enum MenuCategoryMapping {
         "Whiskey/Scotch", "Tequila/Mezcal", "Vodka", "Gin", "Rum", "Brandy/Cognac", "Cordials", "Non Alch"
     ]
 
+    private static let strongDrinkSignals = [
+        "package",
+        "beer",
+        "wine",
+        "cocktail",
+        "mixed drinks",
+        "draft beer",
+        "draft wine",
+        "spirits",
+        "tequila/mezcal",
+        "vodka",
+        "gin",
+        "rum",
+        "whiskey/scotch",
+        "brandy/cognac",
+        "cordials",
+        "non alch",
+        "non-alch"
+    ]
+
     static func classify(_ item: MenuItem) -> MenuSection {
         let squareSection = sectionFromHint(item.sectionHint)
-        if let squareSection, squareSection != .other {
-            return squareSection
+        if let squareSection {
+            if squareSection == .food, hasStrongDrinkSignal(item) {
+                return .drinks
+            }
+            if squareSection != .other {
+                return squareSection
+            }
         }
 
         let normalizedCategory = normalize(item.category)
@@ -174,5 +199,17 @@ enum MenuCategoryMapping {
         }
 
         return explicitCategoryMap[hint]
+    }
+
+    private static func hasStrongDrinkSignal(_ item: MenuItem) -> Bool {
+        let sources = [item.name, item.category] + item.tags + [item.sectionHint ?? ""]
+        for source in sources {
+            let normalized = normalize(source)
+            guard !normalized.isEmpty else { continue }
+            for signal in strongDrinkSignals where normalized.contains(signal) {
+                return true
+            }
+        }
+        return false
     }
 }

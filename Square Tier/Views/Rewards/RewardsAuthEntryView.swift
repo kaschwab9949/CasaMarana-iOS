@@ -42,17 +42,17 @@ struct SignInView: View {
                     .font(.largeTitle)
                     .fontWeight(.bold)
 
-                Text("Sign in with the phone number and 4-digit PIN you created in this app.")
+                Text("Sign in with the same phone number and 4-digit PIN from your Casa Marana app login.")
                     .font(.body)
                     .foregroundStyle(.secondary)
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Quick steps")
                         .font(.footnote.weight(.semibold))
-                    Text("1. Enter the same 10-digit phone number used for your app login.")
-                    Text("2. Enter your 4-digit app PIN.")
-                    Text("3. Tap Sign In to load your points and rewards.")
-                    Text("First time here? Tap Create App Login.")
+                    Text("1. New customer? Tap Create App Login once.")
+                    Text("2. Verify your phone by text, then create your 4-digit PIN.")
+                    Text("3. Enter that same phone number and PIN here.")
+                    Text("4. Tap Sign In to load your Square rewards.")
                 }
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -88,7 +88,7 @@ struct SignInView: View {
                         return
                     }
                     guard pw.count == 4 else {
-                        error = "Enter your 4-digit app PIN. If you are new, tap Create App Login."
+                        error = "Enter your 4-digit app PIN. New customer? Tap Create App Login first."
                         return
                     }
 
@@ -151,6 +151,10 @@ struct SignInView: View {
                 .accessibilityIdentifier("rewards.auth.createAccountLink")
 
                 Text("App login is separate from in-store checkout. After sign-in, we use your verified phone number to pull Square loyalty points.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                Text("Your points, balance, and loyalty status are pulled directly from Square using your verified phone number.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 

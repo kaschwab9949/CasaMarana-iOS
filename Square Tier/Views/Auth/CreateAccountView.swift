@@ -136,17 +136,17 @@ struct CreateAccountView: View {
         }
 
         guard !phone.isEmpty, pinIsValid(p1), p1 == p2, profile.isPhoneVerified else {
-            error = "Please complete all fields correctly, confirm your PIN, and verify your phone number."
+            error = "Please complete all required fields, confirm your PIN, and verify your phone number."
             return
         }
 
         guard isValidCustomerEmail(profile.email) else {
-            error = "Please enter a valid email address."
+            error = "Email is required. Enter a valid email address."
             return
         }
 
         guard let normalizedBirthday = normalizeCustomerBirthday(profile.birthday) else {
-            error = "Birthday must use YYYY-MM-DD or MM-DD format."
+            error = "Birthday is required. Use YYYY-MM-DD or MM-DD format."
             return
         }
 
@@ -208,6 +208,10 @@ struct CreateAccountView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
+                Text("Email and birthday are required to create your account.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
                 Text("After setup, sign in to view your points. If your Square program allows in-app enrollment, we will enroll this phone automatically.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -243,7 +247,7 @@ struct CreateAccountView: View {
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled(true)
                             .accessibilityIdentifier("auth.create.emailField")
-                        TextField("Birthday (optional)", text: $profile.birthday)
+                        TextField("Birthday (required: YYYY-MM-DD or MM-DD)", text: $profile.birthday)
                             .accessibilityIdentifier("auth.create.birthdayField")
                     }
                 }

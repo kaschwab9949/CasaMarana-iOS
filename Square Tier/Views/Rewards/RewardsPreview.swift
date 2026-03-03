@@ -46,7 +46,7 @@ struct RewardsPreviewView: View {
                 Text("Set Up Rewards")
                     .font(.headline)
                 
-                Text("Sign in with your app login to load points and tier status. If this phone is not enrolled in Square Loyalty yet, complete enrollment after an in-store transaction, then refresh.")
+                Text("Sign in with your Casa Marana app login to load your points and loyalty status from Square using your verified phone number.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

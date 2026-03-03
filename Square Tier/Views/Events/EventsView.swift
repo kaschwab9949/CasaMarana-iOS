@@ -10,34 +10,13 @@ struct EventsView: View {
 
     var body: some View {
         List {
-            Section {
-                if let n = model.notice {
-                    Label(n, systemImage: "info.circle")
-                        .font(.footnote)
-                        .foregroundStyle(.blue)
-                }
-
-                if let err = model.error {
+            if let err = model.error {
+                Section {
                     Text(err)
                         .font(.footnote)
                         .foregroundStyle(.red)
                         .accessibilityIdentifier("events.errorText")
                 }
-
-                if let updated = model.lastUpdated {
-                    Text("Last updated \(updated.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .accessibilityIdentifier("events.lastUpdatedText")
-                }
-
-#if DEBUG
-                if model.diagnostics.linksFound > 0 {
-                    Text("Diagnostics: links \(model.diagnostics.linksFound), pages \(model.diagnostics.pagesParsed), events \(model.diagnostics.eventsProduced)")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-#endif
             }
 
             if model.events.isEmpty {
