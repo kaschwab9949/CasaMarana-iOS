@@ -6,7 +6,9 @@ struct RewardsWalletView: View {
 
     @State private var status: LoyaltyStatusResponse? = nil
     @State private var isLoading: Bool = false
+    @State private var isEnrolling: Bool = false
     @State private var errorText: String? = nil
+    @State private var infoText: String? = nil
     @State private var nextRefreshAllowedAt: Date = .distantPast
 
     @State private var passToAdd: PassWrapper? = nil
@@ -158,6 +160,99 @@ struct RewardsWalletView: View {
         }
     }
 
+    private func enrollmentNotAllowedMessage(for error: Error) -> String {
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .rateLimited(let retryAfter):
+                let wait = max(15, Int(ceil(retryAfter ?? 60)))
+                return "Square enrollment is temporarily busy. Try again in \(wait) seconds."
+            case .message(let message):
+                let lowered = message.lowercased()
+                if lowered.contains("route is unavailable")
+                    || lowered.contains("not available")
+                    || lowered.contains("not supported")
+                    || lowered.contains("not allowed")
+                    || lowered.contains("cannot be enrolled")
+                    || lowered.contains("in-store transaction") {
+                    return "In-app enrollment is not available for this Square loyalty program. Complete enrollment in-store, then tap Refresh."
+                }
+            default:
+                break
+            }
+        }
+
+        return UserFacingError.message(
+            for: error,
+            context: .rewards,
+            fallback: "Could not enroll this phone in Square rewards right now."
+        )
+    }
+
+    private func enrollInSquareRewardsIfAvailable() async {
+        guard !phoneE164.isEmpty else {
+            await MainActor.run {
+                self.errorText = "Missing phone number."
+            }
+            return
+        }
+
+        if status == nil {
+            await loadStatus()
+        }
+
+        guard let currentStatus = status else {
+            await MainActor.run {
+                self.errorText = "Could not load rewards status. Tap Refresh and try again."
+            }
+            return
+        }
+
+        guard !currentStatus.enrolled else {
+            await MainActor.run {
+                self.infoText = "This phone is already enrolled in Square rewards."
+            }
+            return
+        }
+
+        await MainActor.run {
+            self.isEnrolling = true
+            self.infoText = nil
+            self.errorText = nil
+        }
+
+        do {
+            let result = try await loyaltyAPI.ensureEnrollment(
+                phoneE164: phoneE164,
+                customerID: currentStatus.customerID
+            )
+
+            if result.enrolled || result.created {
+                await MainActor.run {
+                    self.infoText = "Enrollment succeeded. Refreshing rewards…"
+                }
+                await loadStatus()
+                await MainActor.run {
+                    if self.status?.enrolled == true {
+                        self.infoText = "Square rewards enrollment is active for this phone."
+                    } else {
+                        self.infoText = "Enrollment was requested. If points are not visible yet, tap Refresh again in a moment."
+                    }
+                    self.isEnrolling = false
+                }
+            } else {
+                await MainActor.run {
+                    self.errorText = "Square did not allow in-app enrollment for this phone yet. Complete enrollment in-store, then tap Refresh."
+                    self.isEnrolling = false
+                }
+            }
+        } catch {
+            await MainActor.run {
+                self.errorText = enrollmentNotAllowedMessage(for: error)
+                self.isEnrolling = false
+            }
+        }
+    }
+
     private func buildAndPresentPass() async {
         guard let s = status else { return }
 
@@ -247,6 +342,13 @@ struct RewardsWalletView: View {
                         .accessibilityIdentifier("rewards.wallet.errorText")
                 }
 
+                if let info = infoText {
+                    Text(info)
+                        .foregroundStyle(.secondary)
+                        .font(.footnote)
+                        .accessibilityIdentifier("rewards.wallet.infoText")
+                }
+
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Apple Wallet Pass")
                         .font(.footnote)
@@ -320,9 +422,28 @@ struct RewardsWalletView: View {
                         }
                         .padding(.vertical, 8)
                     } else {
-                        Text("This phone (\(maskedLookupPhone)) is not enrolled in Square Loyalty yet. Complete enrollment after an in-store transaction, then refresh.")
-                            .foregroundStyle(.secondary)
-                            .accessibilityIdentifier("rewards.wallet.notEnrolledText")
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("This phone (\(maskedLookupPhone)) is not enrolled in Square Loyalty yet.")
+                                .foregroundStyle(.secondary)
+                                .accessibilityIdentifier("rewards.wallet.notEnrolledText")
+
+                            Button {
+                                Task { await enrollInSquareRewardsIfAvailable() }
+                            } label: {
+                                HStack {
+                                    if isEnrolling { ProgressView() }
+                                    Text(isEnrolling ? "Enrolling…" : "Enroll in Square Rewards (If Available)")
+                                        .frame(maxWidth: .infinity)
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(isEnrolling || isLoading)
+                            .accessibilityIdentifier("rewards.wallet.enrollButton")
+
+                            Text("We can enroll this phone in-app only when your Square loyalty program allows it.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 } else {
                     Text("No rewards data loaded yet.")

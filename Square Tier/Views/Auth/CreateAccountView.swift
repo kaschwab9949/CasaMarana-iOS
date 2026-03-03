@@ -21,6 +21,7 @@ struct CreateAccountView: View {
 
     @State private var isCreatingAccount = false
     @State private var error: String? = nil
+    @State private var rewardsStatusNote: String? = nil
     @State private var hasPIIConsent = false
 
     private let phoneVerifyAPI = PhoneVerificationAPI()
@@ -89,8 +90,35 @@ struct CreateAccountView: View {
                normalizeCustomerBirthday(profile.birthday) != nil
     }
 
+    private func enrollmentFallbackMessage(for error: Error) -> String {
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .rateLimited(let retryAfter):
+                let wait = max(15, Int(ceil(retryAfter ?? 60)))
+                return "Square rewards enrollment is temporarily busy. Try again in \(wait) seconds after sign-in."
+            case .message(let message):
+                let lowered = message.lowercased()
+                if lowered.contains("route is unavailable")
+                    || lowered.contains("not available")
+                    || lowered.contains("not supported")
+                    || lowered.contains("not allowed")
+                    || lowered.contains("cannot be enrolled")
+                    || lowered.contains("in-store transaction") {
+                    return "Square does not currently allow in-app enrollment for this phone. You can still finish setup and enroll in-store."
+                }
+            default:
+                break
+            }
+        }
+
+        return "App login created. We could not complete Square rewards enrollment yet; sign in and try again from Rewards."
+    }
+
     private func finalizeAccount() async {
         guard !isCreatingAccount else { return }
+
+        error = nil
+        rewardsStatusNote = nil
 
         let name = profile.fullName.trimmingCharacters(in: .whitespacesAndNewlines)
         let phone = profile.phoneE164.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -129,22 +157,33 @@ struct CreateAccountView: View {
         isCreatingAccount = true
         defer { isCreatingAccount = false }
 
+        var postCreateRewardsMessage: String? = nil
         do {
             let status = try await loyaltyAPI.fetchStatus(phoneE164: phone)
-            guard status.enrolled else {
-                error = "This phone number is not enrolled in Square Loyalty yet. Complete enrollment after an in-store transaction, then sign in to the app."
-                return
+            if !status.enrolled {
+                do {
+                    let enrollment = try await loyaltyAPI.ensureEnrollment(
+                        phoneE164: phone,
+                        customerID: status.customerID
+                    )
+
+                    if enrollment.enrolled || enrollment.created {
+                        postCreateRewardsMessage = "Square rewards enrollment is active for this phone."
+                    } else {
+                        postCreateRewardsMessage = "Square did not allow in-app enrollment for this phone yet. You can still use the app and enroll in-store."
+                    }
+                } catch let enrollmentError {
+                    postCreateRewardsMessage = enrollmentFallbackMessage(for: enrollmentError)
+                }
+            } else {
+                postCreateRewardsMessage = "Square rewards is already linked to this phone."
             }
         } catch {
-            self.error = UserFacingError.message(
-                for: error,
-                context: .auth,
-                fallback: "Could not confirm your Square loyalty enrollment. Please try again."
-            )
-            return
+            postCreateRewardsMessage = "App login created. We could not confirm Square rewards right now; sign in and refresh Rewards."
         }
 
         session.createAccount(profile: profile, pin: p1)
+        rewardsStatusNote = postCreateRewardsMessage
 
         // If this view is still on the navigation stack, pop it quickly.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -169,7 +208,7 @@ struct CreateAccountView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
-                Text("After setup, sign in to view your points. If this phone is not enrolled in Square Loyalty yet, complete enrollment after an in-store transaction and then sign in.")
+                Text("After setup, sign in to view your points. If your Square program allows in-app enrollment, we will enroll this phone automatically.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
@@ -181,6 +220,16 @@ struct CreateAccountView: View {
                         .background(Color.red.opacity(0.1))
                         .cornerRadius(8)
                         .accessibilityIdentifier("auth.create.errorText")
+                }
+
+                if let rewardsStatusNote {
+                    Text(rewardsStatusNote)
+                        .foregroundStyle(.secondary)
+                        .font(.callout)
+                        .padding()
+                        .background(Color.secondary.opacity(0.1))
+                        .cornerRadius(8)
+                        .accessibilityIdentifier("auth.create.rewardsStatusNote")
                 }
 
                 GroupBox("Personal Info") {
@@ -385,7 +434,7 @@ struct CreateAccountView: View {
                 .disabled(!canFinalizeAccount || isCreatingAccount)
                 .accessibilityIdentifier("auth.create.createLoginButton")
 
-                Text("Phone verification confirms this device can access your enrolled loyalty account.")
+                Text("Phone verification confirms this device can access your phone-based rewards profile.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .padding(.top, 4)
