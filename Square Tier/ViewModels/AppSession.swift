@@ -8,9 +8,15 @@ final class AppSession: ObservableObject {
     @Published var isUnlocked: Bool = false
     @Published var profile: UserProfile = .empty
 
+    var activePhoneE164: String? {
+        let trimmed = profile.phoneE164.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return normalizePhoneE164(trimmed) ?? trimmed
+    }
+
     var verifiedPhoneE164: String? {
         guard profile.isPhoneVerified else { return nil }
-        return profile.phoneE164.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : profile.phoneE164
+        return activePhoneE164
     }
 
     private let pinAccount = "app.localPin"
@@ -143,12 +149,32 @@ final class AppSession: ObservableObject {
         profile = next
     }
 
+    func markSignedInPhoneVerified(_ phoneE164: String) {
+        let trimmed = phoneE164.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let normalized = normalizePhoneE164(trimmed) ?? trimmed
+
+        var updated = profile
+        updated.phoneE164 = normalized
+        updated.isPhoneVerified = true
+        if let token = updated.phoneVerificationToken?.trimmingCharacters(in: .whitespacesAndNewlines), token.isEmpty {
+            updated.phoneVerificationToken = nil
+        }
+
+        updateProfile(updated)
+        KeychainService.save(normalized, account: phoneAccount)
+    }
+
     private func loadProfile() {
         guard let data = UserDefaults.standard.data(forKey: profileKey),
               let p = try? JSONDecoder().decode(UserProfile.self, from: data) else {
             // Load phone from keychain if it exists but profile doesn't.
             if let phone = KeychainService.load(account: phoneAccount), !phone.isEmpty {
                 profile.phoneE164 = phone
+                if hasSetup {
+                    profile.isPhoneVerified = true
+                }
             }
             return
         }
@@ -157,6 +183,9 @@ final class AppSession: ObservableObject {
         // If phone exists in Keychain but profile not set, seed phone.
         if let phone = KeychainService.load(account: phoneAccount), !phone.isEmpty {
             profile.phoneE164 = phone
+            if hasSetup {
+                profile.isPhoneVerified = true
+            }
         }
     }
 }

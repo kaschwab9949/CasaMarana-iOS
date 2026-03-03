@@ -5,8 +5,8 @@ struct RewardsRootView: View {
 
     var body: some View {
         if session.isUnlocked {
-            // If the phone is verified, load live loyalty status.
-            if session.verifiedPhoneE164 != nil {
+            // Signed-in users with a saved phone should always load live loyalty status.
+            if session.activePhoneE164 != nil {
                 RewardsWalletView()
             } else {
                 RewardsPreviewView()

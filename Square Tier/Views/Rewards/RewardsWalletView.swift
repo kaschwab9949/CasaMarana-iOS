@@ -41,7 +41,7 @@ struct RewardsWalletView: View {
     }
 
     private var phoneE164: String {
-        session.verifiedPhoneE164 ?? ""
+        session.activePhoneE164 ?? ""
     }
 
     private func currentTierName(points: Int, tiers: [RewardTier]) -> String {

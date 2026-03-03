@@ -117,6 +117,35 @@ final class EventsFeedModel: ObservableObject {
         return (String(decoding: data, as: UTF8.self), http)
     }
 
+    private static func dedupeEvents(_ events: [CasaEvent]) -> [CasaEvent] {
+        var uniqueByID: [String: CasaEvent] = [:]
+        for event in events {
+            uniqueByID[event.id] = event
+        }
+        return Array(uniqueByID.values)
+    }
+
+    private static func upcomingSortedEvents(from events: [CasaEvent], now: Date) -> [CasaEvent] {
+        let upcoming = dedupeEvents(events).filter { event in
+            if let end = event.endDate { return end >= now }
+            if let start = event.startDate {
+                return start.addingTimeInterval(3600 * 4) >= now
+            }
+            return true
+        }
+
+        return upcoming.sorted { lhs, rhs in
+            switch (lhs.startDate, rhs.startDate) {
+            case let (l?, r?):
+                return l < r
+            case (nil, _):
+                return false
+            case (_, nil):
+                return true
+            }
+        }
+    }
+
     func refresh(force: Bool = false) async {
         if await MainActor.run(body: { self.isLoading }) { return }
 
@@ -157,8 +186,9 @@ final class EventsFeedModel: ObservableObject {
 
             let eventURLs = Self.extractEventURLs(from: listingHTML)
             diagnostics.linksFound = eventURLs.count
+            let listingCardEvents = Self.extractEventsFromListingCards(listingHTML: listingHTML)
 
-            let urlsToFetch = Array(eventURLs.prefix(25))
+            let urlsToFetch = Array(eventURLs.prefix(40))
             diagnostics.pagesParsed = urlsToFetch.count
 
             let maxConcurrentFetches = 4
@@ -192,9 +222,8 @@ final class EventsFeedModel: ObservableObject {
             }
 
             if parsed.isEmpty {
-                let listingCardFallback = Self.extractEventsFromListingCards(listingHTML: listingHTML)
-                if !listingCardFallback.isEmpty {
-                    parsed = listingCardFallback
+                if !listingCardEvents.isEmpty {
+                    parsed = listingCardEvents
                     diagnostics.usedListingFallback = true
                 }
             }
@@ -207,28 +236,14 @@ final class EventsFeedModel: ObservableObject {
                 }
             }
 
-            var unique: [String: CasaEvent] = [:]
-            for event in parsed {
-                unique[event.id] = event
-            }
-
             let now = Date()
-            let upcoming = unique.values.filter { event in
-                if let end = event.endDate { return end >= now }
-                if let start = event.startDate {
-                    return start.addingTimeInterval(3600 * 4) >= now
-                }
-                return true
-            }
+            var sorted = Self.upcomingSortedEvents(from: parsed, now: now)
 
-            let sorted = upcoming.sorted { lhs, rhs in
-                switch (lhs.startDate, rhs.startDate) {
-                case let (l?, r?):
-                    return l < r
-                case (nil, _):
-                    return false
-                case (_, nil):
-                    return true
+            if sorted.isEmpty && !listingCardEvents.isEmpty {
+                let cardSorted = Self.upcomingSortedEvents(from: listingCardEvents, now: now)
+                if !cardSorted.isEmpty {
+                    sorted = cardSorted
+                    diagnostics.usedListingFallback = true
                 }
             }
 

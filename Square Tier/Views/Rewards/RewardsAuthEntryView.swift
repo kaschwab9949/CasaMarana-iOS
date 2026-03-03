@@ -129,6 +129,10 @@ struct SignInView: View {
                         error = "This phone number does not match the app login on this device."
                         return
                     }
+
+                    // Older local profiles may not carry the verified flag.
+                    // Promote the signed-in phone so rewards can load immediately.
+                    session.markSignedInPhoneVerified(normalizedInput)
                 } label: {
                     Text("Sign In")
                         .frame(maxWidth: .infinity)
