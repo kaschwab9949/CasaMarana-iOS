@@ -18,11 +18,39 @@ final class AppSession: ObservableObject {
     private let profileKey = "cm.userProfile.v1"
 
     init() {
-        if ProcessInfo.processInfo.arguments.contains("-ui-testing-reset-session") {
+        let args = ProcessInfo.processInfo.arguments
+
+        if args.contains("-ui-testing-reset-session") {
             eraseProfileData()
             UserDefaults.standard.set("home", forKey: "cm.selectedTab")
         }
+
+        if args.contains("-ui-testing-seed-demo-account") {
+            seedUITestDemoAccountIfNeeded()
+        }
         loadProfile()
+    }
+
+    private func seedUITestDemoAccountIfNeeded() {
+        guard !hasSetup else { return }
+
+        let seeded = UserProfile(
+            fullName: "UITest Member",
+            phoneE164: "+15205551234",
+            email: "",
+            birthday: "",
+            isPhoneVerified: true,
+            phoneVerificationToken: "ui_test_seeded_token"
+        )
+
+        guard let data = try? JSONEncoder().encode(seeded) else { return }
+        UserDefaults.standard.set(data, forKey: profileKey)
+        KeychainService.save("1234", account: pinAccount)
+        KeychainService.save("+15205551234", account: phoneAccount)
+
+        // Keep auth flow realistic for UI tests: account exists, user still signs in.
+        isUnlocked = false
+        profile = seeded
     }
 
     var hasSetup: Bool {

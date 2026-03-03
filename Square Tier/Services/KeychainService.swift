@@ -3,6 +3,17 @@ import Security
 
 enum KeychainService {
     private static let service = "com.casaMarana.app"
+    private static let uiTestFallbackPrefix = "cm.uiTest.keychain."
+
+    private static var isUITesting: Bool {
+        let args = ProcessInfo.processInfo.arguments
+        return args.contains("-ui-testing-reset-session")
+            || args.contains("-ui-testing-seed-demo-account")
+    }
+
+    private static func fallbackKey(for account: String) -> String {
+        "\(uiTestFallbackPrefix)\(account)"
+    }
 
     @discardableResult
     static func save(_ value: String, account: String) -> Bool {
@@ -17,7 +28,18 @@ enum KeychainService {
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
         ]) { $1 }
-        return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
+        let status = SecItemAdd(add as CFDictionary, nil)
+        if status == errSecSuccess {
+            if isUITesting {
+                UserDefaults.standard.removeObject(forKey: fallbackKey(for: account))
+            }
+            return true
+        }
+
+        // Simulator UI-test runners occasionally fail keychain writes; keep this scoped to UI tests.
+        guard isUITesting else { return false }
+        UserDefaults.standard.set(value, forKey: fallbackKey(for: account))
+        return true
     }
 
     static func load(account: String) -> String? {
@@ -30,8 +52,12 @@ enum KeychainService {
         ]
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
-        guard status == errSecSuccess, let data = item as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
+        if status == errSecSuccess, let data = item as? Data {
+            return String(data: data, encoding: .utf8)
+        }
+
+        guard isUITesting else { return nil }
+        return UserDefaults.standard.string(forKey: fallbackKey(for: account))
     }
 
     static func delete(account: String) {
@@ -41,5 +67,6 @@ enum KeychainService {
             kSecAttrAccount as String: account
         ]
         SecItemDelete(query as CFDictionary)
+        UserDefaults.standard.removeObject(forKey: fallbackKey(for: account))
     }
 }
