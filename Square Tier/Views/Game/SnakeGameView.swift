@@ -97,7 +97,7 @@ struct SnakeGameView: View {
     }
 
     private var boardSwipeGesture: some Gesture {
-        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+        DragGesture(minimumDistance: minimumSwipeDistance, coordinateSpace: .local)
             .updating($isInteractingWithBoard) { _, state, _ in
                 state = true
             }
@@ -211,6 +211,7 @@ struct SnakeGameView: View {
                                         .foregroundColor(.white)
                                         .clipShape(Capsule())
                                 }
+                                .accessibilityIdentifier("snake.overlay.primaryActionButton")
                             }
                             .padding(30)
                             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
@@ -220,30 +221,20 @@ struct SnakeGameView: View {
                     .frame(width: boardSide, height: boardSide)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .contentShape(Rectangle())
-                    .highPriorityGesture(boardSwipeGesture)
+                    .accessibilityIdentifier("snake.board")
+                    .highPriorityGesture(
+                        boardSwipeGesture,
+                        including: (isGameOver || isPaused) ? .none : .all
+                    )
                 }
                 .frame(height: verticalSizeClass == .compact ? 320 : 470)
 
-                VStack(spacing: 16) {
-                    controlButton("arrowtriangle.up.fill", identifier: "snake.control.up") {
-                        requestDirection(.up)
-                    }
-
-                    HStack(spacing: 84) {
-                        controlButton("arrowtriangle.left.fill", identifier: "snake.control.left") {
-                            requestDirection(.left)
-                        }
-                        controlButton("arrowtriangle.right.fill", identifier: "snake.control.right") {
-                            requestDirection(.right)
-                        }
-                    }
-
-                    controlButton("arrowtriangle.down.fill", identifier: "snake.control.down") {
-                        requestDirection(.down)
-                    }
-                }
-                .padding(.horizontal, 24)
-                .padding(.top, 6)
+                Text("Swipe on the board with one finger to move the snake.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                    .accessibilityIdentifier("snake.instructions")
 
                 HStack(spacing: 12) {
                     Button(isPaused ? "Resume" : "Pause") {
@@ -386,22 +377,6 @@ struct SnakeGameView: View {
                 }
             }
         }
-    }
-
-    private func controlButton(
-        _ symbol: String,
-        identifier: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.title2.weight(.bold))
-                .frame(width: 48, height: 48)
-                .background(Circle().fill(Color(uiColor: .secondarySystemBackground)))
-        }
-        .buttonStyle(.plain)
-        .disabled(isGameOver)
-        .accessibilityIdentifier(identifier)
     }
 
     private func handleSwipe(_ translation: CGSize) {

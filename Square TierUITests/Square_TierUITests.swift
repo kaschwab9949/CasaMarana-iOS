@@ -131,10 +131,8 @@ final class Casa_MaranaUITests: XCTestCase {
 
         selectTab(named: "Play Snake")
         XCTAssertTrue(element(withID: "screen.snake").waitForExistence(timeout: 5), "Snake screen did not appear after selecting overflow tab.")
-        XCTAssertTrue(element(withID: "snake.control.up").waitForExistence(timeout: 5), "Snake up control button should be visible.")
-        XCTAssertTrue(element(withID: "snake.control.left").waitForExistence(timeout: 5), "Snake left control button should be visible.")
-        XCTAssertTrue(element(withID: "snake.control.right").waitForExistence(timeout: 5), "Snake right control button should be visible.")
-        XCTAssertTrue(element(withID: "snake.control.down").waitForExistence(timeout: 5), "Snake down control button should be visible.")
+        XCTAssertTrue(element(withID: "snake.board").waitForExistence(timeout: 5), "Snake board should be visible.")
+        XCTAssertTrue(element(withID: "snake.instructions").waitForExistence(timeout: 5), "Snake swipe instructions should be visible.")
         XCTAssertTrue(element(withID: "snake.leaderboard.section").waitForExistence(timeout: 5), "Snake leaderboard section should be visible.")
 
         selectTab(named: "Settings")
