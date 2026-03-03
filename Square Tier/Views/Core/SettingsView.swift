@@ -244,6 +244,9 @@ struct PrivacyDataUseView: View {
 
                 Text("We do not upload your full profile. Phone numbers are securely verified and synced to lookup Square member points.")
                     .foregroundStyle(.secondary)
+
+                Text("If Smart Check-In is enabled and a birthday is on file, birthday may be sent with location samples to support rewards logic.")
+                    .foregroundStyle(.secondary)
             }
 
             Section {

@@ -861,15 +861,23 @@ final class LoyaltyAPI {
         lat: Double,
         lon: Double,
         accuracy: Double,
-        timestamp: TimeInterval
+        timestamp: TimeInterval,
+        customerBirthday: String? = nil
     ) async throws {
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "phone": phoneE164,
             "lat": lat,
             "lon": lon,
             "accuracy": accuracy,
             "timestamp": timestamp
         ]
+
+        if let customerBirthday {
+            let trimmedBirthday = customerBirthday.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedBirthday.isEmpty {
+                body["customerBirthday"] = trimmedBirthday
+            }
+        }
 
         let payload = try JSONSerialization.data(withJSONObject: body, options: [])
 

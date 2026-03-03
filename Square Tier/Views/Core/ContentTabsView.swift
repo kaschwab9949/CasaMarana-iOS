@@ -196,6 +196,7 @@ struct ContentTabsView: View {
                 let sample = location.latestSample,
                 let phone = session.verifiedPhoneE164
             else { return }
+            let birthday = normalizeCustomerBirthday(session.profile.birthday)
 
             // Throttle posts to once per 5 minutes max
             let now = Date().timeIntervalSince1970
@@ -208,7 +209,8 @@ struct ContentTabsView: View {
                             lat: sample.lat,
                             lon: sample.lon,
                             accuracy: sample.accuracy,
-                            timestamp: sample.timestamp
+                            timestamp: sample.timestamp,
+                            customerBirthday: birthday
                         )
                         lastLocationPostTs = now
                     } catch {
