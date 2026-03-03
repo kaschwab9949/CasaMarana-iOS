@@ -260,7 +260,6 @@ final class EventsFeedModel: ObservableObject {
 
             let now = Date()
             var sorted = Self.upcomingSortedEvents(from: parsed, now: now)
-            var usingRecentFallback = false
 
             if sorted.isEmpty && !listingCardEvents.isEmpty {
                 let cardSorted = Self.upcomingSortedEvents(from: listingCardEvents, now: now)
@@ -273,7 +272,6 @@ final class EventsFeedModel: ObservableObject {
             // If device date/time is off or no upcoming events are tagged correctly, still surface parsed events.
             if sorted.isEmpty && !parsed.isEmpty {
                 sorted = Self.chronologicalEvents(from: parsed)
-                usingRecentFallback = true
             }
 
             diagnostics.eventsProduced = sorted.count
@@ -296,16 +294,7 @@ final class EventsFeedModel: ObservableObject {
             }
 
             await MainActor.run {
-                let missingDates = sorted.filter { $0.startDate == nil }.count
-                if usingRecentFallback {
-                    self.notice = "Showing recent events from the latest listing."
-                } else if missingDates == sorted.count {
-                    self.notice = "We found events, but no clear dates for them. Tap each event for details."
-                } else if missingDates > 0 {
-                    self.notice = "Some events don’t include a readable date/time yet and will show as Date TBD."
-                } else {
-                    self.notice = nil
-                }
+                self.notice = nil
             }
 
             await MainActor.run {
