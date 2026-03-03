@@ -109,6 +109,28 @@ struct MenuView: View {
         return MenuCategoryMapping.orderedCategories(in: effectiveSection, items: filteredItems)
     }
 
+    private func customerBadges(for item: MenuItem) -> [String] {
+        let category = item.category.trimmingCharacters(in: .whitespacesAndNewlines)
+        var seen = Set<String>()
+        var badges: [String] = []
+
+        let candidates = item.tags + [item.sectionHint ?? ""]
+        for raw in candidates {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if !category.isEmpty && trimmed.localizedCaseInsensitiveCompare(category) == .orderedSame {
+                continue
+            }
+
+            let signature = trimmed.lowercased()
+            if seen.insert(signature).inserted {
+                badges.append(trimmed)
+            }
+        }
+
+        return Array(badges.prefix(3))
+    }
+
     private func items(in category: String) -> [MenuItem] {
         filteredItems
             .filter { $0.category == category }
@@ -197,6 +219,20 @@ struct MenuView: View {
                                         Text(item.description)
                                             .font(.subheadline)
                                             .foregroundStyle(.secondary)
+                                    }
+
+                                    let badges = customerBadges(for: item)
+                                    if !badges.isEmpty {
+                                        HStack(spacing: 6) {
+                                            ForEach(badges, id: \.self) { badge in
+                                                Text(badge)
+                                                    .font(.caption2)
+                                                    .padding(.horizontal, 8)
+                                                    .padding(.vertical, 3)
+                                                    .background(Color.secondary.opacity(0.12))
+                                                    .clipShape(Capsule())
+                                            }
+                                        }
                                     }
                                 }
                                 .padding(.vertical, 4)

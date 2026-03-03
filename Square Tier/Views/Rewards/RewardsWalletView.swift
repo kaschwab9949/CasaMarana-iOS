@@ -10,6 +10,7 @@ struct RewardsWalletView: View {
     @State private var errorText: String? = nil
     @State private var infoText: String? = nil
     @State private var nextRefreshAllowedAt: Date = .distantPast
+    @State private var accountSummary: LoyaltyAccountSummary? = nil
 
     @State private var passToAdd: PassWrapper? = nil
 
@@ -54,6 +55,66 @@ struct RewardsWalletView: View {
             return "Unavailable"
         }
         return "••• ••• \(suffix)"
+    }
+
+    private func maskedPhone(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let digits = raw.filter(\.isNumber)
+        guard digits.count >= 4 else { return nil }
+        return "••• ••• \(digits.suffix(4))"
+    }
+
+    private func parseDate(_ raw: String?) -> Date? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let parsed = iso.date(from: trimmed) {
+            return parsed
+        }
+
+        let isoNoFraction = ISO8601DateFormatter()
+        isoNoFraction.formatOptions = [.withInternetDateTime]
+        if let parsed = isoNoFraction.date(from: trimmed) {
+            return parsed
+        }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+
+        let formats = [
+            "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+            "yyyy-MM-dd'T'HH:mm:ssZ",
+            "yyyy-MM-dd"
+        ]
+
+        for format in formats {
+            formatter.dateFormat = format
+            if let parsed = formatter.date(from: trimmed) {
+                return parsed
+            }
+        }
+
+        return nil
+    }
+
+    private func memberSinceText(status: LoyaltyStatusResponse) -> String? {
+        let candidates: [String?] = [
+            status.membershipStartDate,
+            accountSummary?.enrolledAt,
+            accountSummary?.createdAt
+        ]
+
+        for candidate in candidates {
+            if let date = parseDate(candidate) {
+                return date.formatted(date: .abbreviated, time: .omitted)
+            }
+        }
+
+        return nil
     }
 
     private func currentTierName(points: Int, tiers: [RewardTier]) -> String {
@@ -139,8 +200,23 @@ struct RewardsWalletView: View {
 
         do {
             let res = try await loyaltyAPI.fetchStatus(phoneE164: phoneE164)
+            var fetchedAccount: LoyaltyAccountSummary? = nil
+            if let customerID = res.customerID?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !customerID.isEmpty {
+                do {
+                    fetchedAccount = try await loyaltyAPI.searchAccounts(customerIDs: [customerID], limit: 1).first
+                } catch {
+                    // Best-effort enrichment. Status should still load even if account search fails.
+                }
+            }
+
             await MainActor.run {
                 self.status = res
+                if let fetchedAccount {
+                    self.accountSummary = fetchedAccount
+                } else if !res.enrolled {
+                    self.accountSummary = nil
+                }
                 self.isLoading = false
                 self.nextRefreshAllowedAt = Date().addingTimeInterval(5)
             }
@@ -229,6 +305,9 @@ struct RewardsWalletView: View {
             if result.enrolled || result.created {
                 await MainActor.run {
                     self.infoText = "Enrollment succeeded. Refreshing rewards…"
+                    if let account = result.account {
+                        self.accountSummary = account
+                    }
                 }
                 await loadStatus()
                 await MainActor.run {
@@ -407,6 +486,30 @@ struct RewardsWalletView: View {
                             Text("\(s.points) pts")
                                 .font(.headline)
                                 .fontWeight(.semibold)
+
+                            if let memberSince = memberSinceText(status: s) {
+                                Label("Member since \(memberSince)", systemImage: "calendar")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            if let squarePhone = maskedPhone(s.phoneNumber), squarePhone != maskedLookupPhone {
+                                Label("Square phone on file: \(squarePhone)", systemImage: "phone")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            if let lifetimePoints = accountSummary?.lifetimePoints, lifetimePoints > 0 {
+                                Label("Lifetime points earned: \(lifetimePoints)", systemImage: "chart.line.uptrend.xyaxis")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            if let squareBalance = accountSummary?.balance, squareBalance > 0, squareBalance != s.points {
+                                Label("Square balance: \(squareBalance) pts", systemImage: "number.circle")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
 
                             Text("Your loyalty pass shows the business name, available point balance, membership start date, account holder name, and phone number.")
                                 .font(.footnote)

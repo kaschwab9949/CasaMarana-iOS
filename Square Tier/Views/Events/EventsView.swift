@@ -24,11 +24,20 @@ struct EventsView: View {
                         .accessibilityIdentifier("events.errorText")
                 }
 
+                if let updated = model.lastUpdated {
+                    Text("Last updated \(updated.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("events.lastUpdatedText")
+                }
+
+#if DEBUG
                 if model.diagnostics.linksFound > 0 {
                     Text("Diagnostics: links \(model.diagnostics.linksFound), pages \(model.diagnostics.pagesParsed), events \(model.diagnostics.eventsProduced)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
+#endif
             }
 
             if model.events.isEmpty {
@@ -69,6 +78,16 @@ struct EventsView: View {
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                         .lineLimit(2)
+                                }
+
+                                if let location = locationLine(e), !location.isEmpty {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "mappin.and.ellipse")
+                                        Text(location)
+                                    }
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
                                 }
                             }
                             .padding(.vertical, 6)
@@ -121,6 +140,14 @@ struct EventsView: View {
         } else {
             return "Date TBD"
         }
+    }
+
+    private func locationLine(_ event: CasaEvent) -> String? {
+        [event.locationName, event.locationAddress]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " • ")
+            .nilIfEmpty
     }
 }
 
