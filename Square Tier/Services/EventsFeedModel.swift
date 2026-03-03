@@ -146,6 +146,19 @@ final class EventsFeedModel: ObservableObject {
         }
     }
 
+    private static func chronologicalEvents(from events: [CasaEvent]) -> [CasaEvent] {
+        dedupeEvents(events).sorted { lhs, rhs in
+            switch (lhs.startDate, rhs.startDate) {
+            case let (l?, r?):
+                return l < r
+            case (nil, _):
+                return false
+            case (_, nil):
+                return true
+            }
+        }
+    }
+
     func refresh(force: Bool = false) async {
         if await MainActor.run(body: { self.isLoading }) { return }
 
@@ -187,57 +200,67 @@ final class EventsFeedModel: ObservableObject {
             let eventURLs = Self.extractEventURLs(from: listingHTML)
             diagnostics.linksFound = eventURLs.count
             let listingCardEvents = Self.extractEventsFromListingCards(listingHTML: listingHTML)
+            let listingJSONEvents = Self.extractEventsFromListing(listingHTML: listingHTML, listingURL: eventsURL)
 
-            let urlsToFetch = Array(eventURLs.prefix(40))
-            diagnostics.pagesParsed = urlsToFetch.count
+            // Prefer events parsed directly from the listing page; this is faster and more stable.
+            var parsed: [CasaEvent] = []
+            if !listingCardEvents.isEmpty {
+                parsed = listingCardEvents
+                diagnostics.usedListingFallback = true
+            } else if !listingJSONEvents.isEmpty {
+                parsed = listingJSONEvents
+                diagnostics.usedListingFallback = true
+            }
 
-            let maxConcurrentFetches = 4
-            var parsed: [CasaEvent] = await withTaskGroup(of: [CasaEvent].self, returning: [CasaEvent].self) { group in
-                func addTask(for url: URL) {
-                    group.addTask {
-                        await Self.fetchOneEventPage(url: url)
+            if parsed.isEmpty {
+                // Detail-page scraping is now a backup only.
+                let urlsToFetch = Array(eventURLs.prefix(12))
+                diagnostics.pagesParsed = urlsToFetch.count
+
+                let maxConcurrentFetches = 4
+                parsed = await withTaskGroup(of: [CasaEvent].self, returning: [CasaEvent].self) { group in
+                    func addTask(for url: URL) {
+                        group.addTask {
+                            await Self.fetchOneEventPage(url: url)
+                        }
                     }
-                }
 
-                var results: [CasaEvent] = []
-                var index = 0
+                    var results: [CasaEvent] = []
+                    var index = 0
 
-                while index < min(maxConcurrentFetches, urlsToFetch.count) {
-                    addTask(for: urlsToFetch[index])
-                    index += 1
-                }
-
-                while let found = await group.next() {
-                    results.append(contentsOf: found)
-                    if index < urlsToFetch.count {
+                    while index < min(maxConcurrentFetches, urlsToFetch.count) {
                         addTask(for: urlsToFetch[index])
                         index += 1
                     }
+
+                    while let found = await group.next() {
+                        results.append(contentsOf: found)
+                        if index < urlsToFetch.count {
+                            addTask(for: urlsToFetch[index])
+                            index += 1
+                        }
+                    }
+                    return results
                 }
-                return results
-            }
 
-            if Task.isCancelled {
-                return
-            }
-
-            if parsed.isEmpty {
-                if !listingCardEvents.isEmpty {
-                    parsed = listingCardEvents
-                    diagnostics.usedListingFallback = true
+                if Task.isCancelled {
+                    return
                 }
-            }
 
-            if parsed.isEmpty {
-                let listingFallback = Self.extractEventsFromListing(listingHTML: listingHTML, listingURL: eventsURL)
-                if !listingFallback.isEmpty {
-                    parsed = listingFallback
-                    diagnostics.usedListingFallback = true
+                if parsed.isEmpty {
+                    if !listingCardEvents.isEmpty {
+                        parsed = listingCardEvents
+                        diagnostics.usedListingFallback = true
+                    } else if !listingJSONEvents.isEmpty {
+                        parsed = listingJSONEvents
+                        diagnostics.usedListingFallback = true
+                    }
                 }
             }
 
             let now = Date()
             var sorted = Self.upcomingSortedEvents(from: parsed, now: now)
+            var usingRecentFallback = false
 
             if sorted.isEmpty && !listingCardEvents.isEmpty {
                 let cardSorted = Self.upcomingSortedEvents(from: listingCardEvents, now: now)
@@ -245,6 +268,12 @@ final class EventsFeedModel: ObservableObject {
                     sorted = cardSorted
                     diagnostics.usedListingFallback = true
                 }
+            }
+
+            // If device date/time is off or no upcoming events are tagged correctly, still surface parsed events.
+            if sorted.isEmpty && !parsed.isEmpty {
+                sorted = Self.chronologicalEvents(from: parsed)
+                usingRecentFallback = true
             }
 
             diagnostics.eventsProduced = sorted.count
@@ -268,7 +297,9 @@ final class EventsFeedModel: ObservableObject {
 
             await MainActor.run {
                 let missingDates = sorted.filter { $0.startDate == nil }.count
-                if missingDates == sorted.count {
+                if usingRecentFallback {
+                    self.notice = "Showing recent events from the latest listing."
+                } else if missingDates == sorted.count {
                     self.notice = "We found events, but no clear dates for them. Tap each event for details."
                 } else if missingDates > 0 {
                     self.notice = "Some events don’t include a readable date/time yet and will show as Date TBD."
@@ -277,7 +308,9 @@ final class EventsFeedModel: ObservableObject {
                 }
             }
 
-            saveCache(sorted)
+            await MainActor.run {
+                self.saveCache(sorted)
+            }
             consecutiveFailures = 0
             nextRetryAt = nil
         } catch {
@@ -462,19 +495,49 @@ final class EventsFeedModel: ObservableObject {
     }
 
     nonisolated private static func decodeHTMLEntities(_ s: String) -> String {
-        guard let data = s.data(using: .utf8) else { return s }
+        guard s.contains("&") else { return s }
 
-        // Use NSAttributedString HTML decoding with correctly typed options.
-        let nsOptions: [NSAttributedString.DocumentReadingOptionKey: Any] = [
-            .documentType: NSAttributedString.DocumentType.html,
-            .characterEncoding: String.Encoding.utf8.rawValue
+        var value = s
+        let replacements: [(String, String)] = [
+            ("&amp;", "&"),
+            ("&quot;", "\""),
+            ("&#39;", "'"),
+            ("&apos;", "'"),
+            ("&lt;", "<"),
+            ("&gt;", ">"),
+            ("&nbsp;", " ")
         ]
-        if let attr = try? NSAttributedString(data: data, options: nsOptions, documentAttributes: nil) {
-            return attr.string
+
+        for (entity, decoded) in replacements {
+            value = value.replacingOccurrences(of: entity, with: decoded)
         }
 
-        // Final fallback: return original string
-        return s
+        // Decode numeric entities like &#8217; and &#x2019;.
+        guard let regex = try? NSRegularExpression(pattern: "&#(x?[0-9A-Fa-f]+);") else {
+            return value
+        }
+
+        let ns = value as NSString
+        let matches = regex.matches(in: value, range: NSRange(location: 0, length: ns.length)).reversed()
+        var result = value
+
+        for match in matches {
+            guard match.numberOfRanges > 1 else { continue }
+            let token = ns.substring(with: match.range(at: 1))
+
+            let scalarValue: UInt32?
+            if token.lowercased().hasPrefix("x") {
+                scalarValue = UInt32(token.dropFirst(), radix: 16)
+            } else {
+                scalarValue = UInt32(token, radix: 10)
+            }
+
+            guard let scalarValue, let scalar = UnicodeScalar(scalarValue) else { continue }
+            guard let swiftRange = Range(match.range, in: result) else { continue }
+            result.replaceSubrange(swiftRange, with: String(Character(scalar)))
+        }
+
+        return result
     }
 
     private static func extractEventURLs(from listingHTML: String) -> [URL] {

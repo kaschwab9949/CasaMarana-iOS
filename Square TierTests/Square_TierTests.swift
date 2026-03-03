@@ -201,6 +201,29 @@ final class Casa_MaranaTests: XCTestCase {
         XCTAssertEqual(urls.first?.absoluteString, "https://www.casamarana.com/events/2026/3/3/generalwebp")
     }
 
+    func testEventsListingCardExtractorParsesUpcomingEventCard() {
+        let html = """
+        <article class="eventlist-event eventlist-event--upcoming eventlist-event--hasimg eventlist-hasimg">
+          <h1 class="eventlist-title"><a href="/events/2026/3/3/generalwebp" class="eventlist-title-link">General Trivia!</a></h1>
+          <ul class="eventlist-meta event-meta eventlist-meta-time">
+            <li class="eventlist-meta-item eventlist-meta-date event-meta-item">
+              <time class="event-date" datetime="2026-03-03">Tuesday, March 3, 2026</time>
+            </li>
+            <li class="eventlist-meta-item eventlist-meta-time event-meta-item">
+              <time class="event-time-localized-start" datetime="2026-03-03">7:00 PM</time>
+            </li>
+          </ul>
+          <div class="eventlist-description">Trivia night every Tuesday.</div>
+        </article>
+        """
+
+        let events = EventsFeedModel.debugExtractEventsFromListingCards(from: html)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events.first?.title, "General Trivia!")
+        XCTAssertEqual(events.first?.url?.absoluteString, "https://www.casamarana.com/events/2026/3/3/generalwebp")
+        XCTAssertNotNil(events.first?.startDate)
+    }
+
     func testBackendRouteCandidateOrderIsCanonicalFirst() {
         XCTAssertEqual(BackendRoute.smartCheckInCandidates.first, BackendRoute.smartCheckInCanonical)
         XCTAssertEqual(BackendRoute.accountDeleteCandidates.first, BackendRoute.accountDeleteCanonical)
