@@ -111,4 +111,19 @@ public enum AppConfig {
         return modes
     }
 
+    // Optional App Review bypass account.
+    // When configured, a fresh install can sign in once with this phone + PIN
+    // without SMS verification to support App Review login access.
+    public static var appReviewPhoneE164: String? {
+        guard let raw = normalizedKey(plistString("CMAppReviewPhoneE164")) else { return nil }
+        return normalizePhoneE164(raw)
+    }
+
+    public static var appReviewPIN: String? {
+        guard let raw = normalizedKey(plistString("CMAppReviewPIN")) else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count == 4, trimmed.allSatisfy(\.isNumber) else { return nil }
+        return trimmed
+    }
+
 }

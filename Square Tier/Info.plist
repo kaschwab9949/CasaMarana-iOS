@@ -8,6 +8,10 @@
 	<string>$(CM_API_KEY)</string>
 	<key>CMAPIAuthMode</key>
 	<string>$(CM_API_AUTH_MODE)</string>
+	<key>CMAppReviewPhoneE164</key>
+	<string>$(CM_APP_REVIEW_PHONE_E164)</string>
+	<key>CMAppReviewPIN</key>
+	<string>$(CM_APP_REVIEW_PIN)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Casa Marana uses your location while you use the app for optional Smart Check-In at the venue.</string>
 	<key>NSFaceIDUsageDescription</key>

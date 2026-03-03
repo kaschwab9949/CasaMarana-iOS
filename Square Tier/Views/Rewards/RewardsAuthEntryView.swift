@@ -31,6 +31,21 @@ struct SignInView: View {
         ProcessInfo.processInfo.arguments.contains("-ui-testing-seed-demo-account")
     }
 
+    private var appReviewBypassPhoneE164: String? {
+        AppConfig.appReviewPhoneE164
+    }
+
+    private var appReviewBypassPIN: String? {
+        AppConfig.appReviewPIN
+    }
+
+    private func shouldAutoSeedReviewAccount(normalizedInput: String, pin: String) -> Bool {
+        guard !session.hasSetup else { return false }
+        guard let reviewPhone = appReviewBypassPhoneE164,
+              let reviewPIN = appReviewBypassPIN else { return false }
+        return normalizedInput == reviewPhone && pin == reviewPIN
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -104,6 +119,21 @@ struct SignInView: View {
                             phoneVerificationToken: "ui_test_seeded_token"
                         )
                         session.createAccount(profile: seeded, pin: pw)
+                    }
+
+                    // App Review-only bypass: allows first-time sign-in without SMS
+                    // when the configured review phone + PIN are entered.
+                    if shouldAutoSeedReviewAccount(normalizedInput: normalizedInput, pin: pw) {
+                        let reviewProfile = UserProfile(
+                            fullName: "Casa Marana Review Account",
+                            phoneE164: normalizedInput,
+                            email: "",
+                            birthday: "",
+                            isPhoneVerified: true,
+                            phoneVerificationToken: "app_review_bypass"
+                        )
+                        session.createAccount(profile: reviewProfile, pin: pw)
+                        return
                     }
 
                     guard session.hasSetup else {
