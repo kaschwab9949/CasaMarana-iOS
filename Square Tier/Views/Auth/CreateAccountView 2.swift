@@ -86,8 +86,8 @@ struct CreateAccountView: View {
                pinIsValid(p1) &&
                p1 == p2 &&
                hasPIIConsent &&
-               isValidCustomerEmailRequired(profile.email) &&
-               normalizeCustomerBirthdayRequired(profile.birthday) != nil
+               isValidCustomerEmail(profile.email) &&
+               normalizeCustomerBirthday(profile.birthday) != nil
     }
 
     private func enrollmentFallbackMessage(for error: Error) -> String {
@@ -140,13 +140,13 @@ struct CreateAccountView: View {
             return
         }
 
-        guard isValidCustomerEmailRequired(profile.email) else {
+        guard isValidCustomerEmail(profile.email) else {
             error = "Email is required. Enter a valid email address."
             return
         }
 
-        guard let normalizedBirthday = normalizeCustomerBirthdayRequired(profile.birthday) else {
-            error = "Birthday is required. Use MM/DD/YY format."
+        guard let normalizedBirthday = normalizeCustomerBirthday(profile.birthday) else {
+            error = "Birthday is required. Use YYYY-MM-DD or MM-DD format."
             return
         }
 
@@ -247,9 +247,7 @@ struct CreateAccountView: View {
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled(true)
                             .accessibilityIdentifier("auth.create.emailField")
-                        TextField("Birthday (required: MM/DD/YY)", text: $profile.birthday)
-                            .keyboardType(.numbersAndPunctuation)
-                            .textContentType(.birthdate)
+                        TextField("Birthday (required: YYYY-MM-DD or MM-DD)", text: $profile.birthday)
                             .accessibilityIdentifier("auth.create.birthdayField")
                     }
                 }

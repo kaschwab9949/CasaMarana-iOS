@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Desktop_Commander__read_file",
+      "Bash(xcodebuild -scheme \"Casa Marana\" -destination \"generic/platform=iOS\" -configuration Debug build)",
+      "Bash(sudo xcode-select -s /Applications/Xcode.app/Contents/Developer)",
+      "Bash(xcodebuild -version)",
+      "Bash(xcode-select -p)",
+      "Bash(/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -scheme \"Casa Marana\" -project \"/Users/kyleschwab/Desktop/Dev Projects/Square Tier/Square Tier.xcodeproj\" -destination \"generic/platform=iOS\" -configuration Debug build)",
+      "Bash(/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -scheme \"Casa Marana\" -project \"Square Tier.xcodeproj\" -destination \"generic/platform=iOS\" -configuration Debug clean)",
+      "Bash(/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -scheme \"Casa Marana\" -project \"Square Tier.xcodeproj\" -destination \"generic/platform=iOS\" -configuration Debug build)",
+      "Bash(\"/Users/kyleschwab/Desktop/Dev Projects/Square:*)",
+      "Bash(python3 -c \"import random; chars=''0123456789ABCDEF''; print\\(''''.join\\(random.choices\\(chars, k=24\\)\\)\\); print\\(''''.join\\(random.choices\\(chars, k=24\\)\\)\\); print\\(''''.join\\(random.choices\\(chars, k=24\\)\\)\\)\")",
+      "Bash(/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -scheme \"Casa Marana\" -project \"Square Tier.xcodeproj\" -destination \"generic/platform=iOS\" -configuration Debug clean build)",
+      "Bash(/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -scheme \"Casa Marana\" -project \"Square Tier.xcodeproj\" -destination \"generic/platform=iOS\" -configuration Release archive -archivePath /tmp/CasaMarana.xcarchive)"
+    ]
+  }
+}

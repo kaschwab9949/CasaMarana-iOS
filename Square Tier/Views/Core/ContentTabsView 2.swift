@@ -1,6 +1,5 @@
 import SwiftUI
 import CoreLocation
-import UIKit
 
 enum AppTab: String, Hashable {
     case home
@@ -36,83 +35,17 @@ extension View {
 struct ContentTabsView: View {
     @EnvironmentObject var session: AppSession
     @EnvironmentObject var location: VenueLocationManager
-    @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.openURL) private var openURL
     @AppStorage("cm.selectedTab") private var selectedTabRaw: String = AppTab.home.rawValue
+    @AppStorage("cm.smartCheckInEnabled") private var smartCheckInEnabled: Bool = false
     @State private var lastLocationPostTs: TimeInterval = 0
-    @State private var isSmartCheckInActive = false
-    @State private var showLocationPrompt = false
-    @State private var hasHandledActivePhase = false
-    @State private var suppressNextActivePrompt = false
 
     private let loyaltyAPI = LoyaltyAPI()
-
-    private var isUITesting: Bool {
-        ProcessInfo.processInfo.arguments.contains { $0.hasPrefix("-ui-testing") }
-    }
-
-    private var locationPromptMessage: String {
-        switch location.authorization {
-        case .notDetermined:
-            return "Allow location access so Casa Marana can detect your visit and award Smart Check-In points."
-        case .authorizedAlways, .authorizedWhenInUse:
-            return "Use your location for this app session to detect your visit and award Smart Check-In points."
-        case .denied, .restricted:
-            return "Location access is off. Open Settings to enable Smart Check-In for this app session."
-        @unknown default:
-            return "Allow location access so Smart Check-In can detect your visit while you use the app."
-        }
-    }
 
     private var selectedTab: Binding<AppTab> {
         Binding(
             get: { AppTab(rawValue: selectedTabRaw) ?? .home },
             set: { selectedTabRaw = $0.rawValue }
         )
-    }
-
-    private func openSystemSettings() {
-        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-        openURL(url)
-    }
-
-    private func activateSmartCheckInForCurrentSession() {
-        isSmartCheckInActive = true
-
-        switch location.authorization {
-        case .notDetermined:
-            suppressNextActivePrompt = true
-            location.requestPermission()
-        case .authorizedAlways, .authorizedWhenInUse:
-            location.start()
-        default:
-            isSmartCheckInActive = false
-            location.stop()
-        }
-    }
-
-    private func declineSmartCheckInForCurrentSession() {
-        isSmartCheckInActive = false
-        location.stop()
-    }
-
-    private func handleActivePhase() {
-        guard !hasHandledActivePhase else { return }
-        hasHandledActivePhase = true
-
-        guard session.hasSetup, !isUITesting else {
-            showLocationPrompt = false
-            declineSmartCheckInForCurrentSession()
-            return
-        }
-
-        if suppressNextActivePrompt {
-            suppressNextActivePrompt = false
-            return
-        }
-
-        declineSmartCheckInForCurrentSession()
-        showLocationPrompt = true
     }
 
     private func applyUITestSelectedTabOverrideIfPresent() {
@@ -229,29 +162,14 @@ struct ContentTabsView: View {
         .tint(Color.mint) // AppBrand.accent is mint
         .onAppear {
             applyUITestSelectedTabOverrideIfPresent()
-            handleActivePhase()
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active {
-                handleActivePhase()
+            if smartCheckInEnabled {
+                location.start()
             } else {
-                hasHandledActivePhase = false
+                location.stop()
             }
-        }
-        .onChange(of: session.hasSetup) { _, hasSetup in
-            guard hasSetup else {
-                showLocationPrompt = false
-                declineSmartCheckInForCurrentSession()
-                return
-            }
-
-            guard !isUITesting else { return }
-            guard scenePhase == .active else { return }
-            declineSmartCheckInForCurrentSession()
-            showLocationPrompt = true
         }
         .onChange(of: location.authorization) { _, newValue in
-            guard isSmartCheckInActive else {
+            guard smartCheckInEnabled else {
                 location.stop()
                 return
             }
@@ -263,15 +181,21 @@ struct ContentTabsView: View {
                 location.stop()
             }
         }
+        .onChange(of: smartCheckInEnabled) { _, enabled in
+            if enabled {
+                location.start()
+            } else {
+                location.stop()
+            }
+        }
         .onChange(of: location.lastLocationSampledAt) { _, newValue in
             guard newValue != nil else { return }
-            guard isSmartCheckInActive else { return }
+            guard smartCheckInEnabled else { return }
 
             guard
                 let sample = location.latestSample,
                 let phone = session.verifiedPhoneE164
             else { return }
-            let birthday = normalizeCustomerBirthday(session.profile.birthday)
 
             // Throttle posts to once per 5 minutes max
             let now = Date().timeIntervalSince1970
@@ -284,8 +208,7 @@ struct ContentTabsView: View {
                             lat: sample.lat,
                             lon: sample.lon,
                             accuracy: sample.accuracy,
-                            timestamp: sample.timestamp,
-                            customerBirthday: birthday
+                            timestamp: sample.timestamp
                         )
                         lastLocationPostTs = now
                     } catch {
@@ -293,27 +216,6 @@ struct ContentTabsView: View {
                     }
                 }
             }
-        }
-        .alert("Smart Check-In", isPresented: $showLocationPrompt) {
-            switch location.authorization {
-            case .denied, .restricted:
-                Button("Open Settings") {
-                    declineSmartCheckInForCurrentSession()
-                    openSystemSettings()
-                }
-                Button("Not Now", role: .cancel) {
-                    declineSmartCheckInForCurrentSession()
-                }
-            default:
-                Button("Use My Location") {
-                    activateSmartCheckInForCurrentSession()
-                }
-                Button("Not Now", role: .cancel) {
-                    declineSmartCheckInForCurrentSession()
-                }
-            }
-        } message: {
-            Text(locationPromptMessage)
         }
     }
 }
